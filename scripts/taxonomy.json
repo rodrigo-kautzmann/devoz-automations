@@ -1,11 +1,21 @@
 {
-  "_doc": "Lista CANÔNICA de áreas válidas da DevOZ. Fonte única — planilhas, organograma e diretório leem daqui. Mantida alinhada aos Departamentos do Feedz (RH). 'Quais áreas existem' = aqui; 'em que área cada pessoa está' = Feedz.",
-  "pilares": {
-    "Diretoria": ["Diretoria"],
-    "Revenue": ["Marketing", "Sales", "Demand Generation", "Customer Care / Support", "Customer Care / Customer Success", "Customer Care / Data Manipulation"],
-    "Product & Development": ["Product", "Develop", "Develop / Platform", "Services", "Services / Integração", "Services / Automação"],
-    "Innovation": ["Innovation"],
-    "People": ["People"],
-    "Business Support": ["Admin & Finance", "IT", "Legal"]
-  }
+  "_doc": "Lista CANÔNICA de áreas válidas da DevOZ. Cada 'area' é uma folha única (valor atômico). 'pilar' e 'grupo' são derivados — nunca concatene no nome. Fonte única: planilha, organograma e diretório leem daqui. Feedz (RH) será ajustado para refletir estas áreas; Feedz = atribuição (quem está onde), taxonomia = conjunto válido + forma.",
+  "areas": [
+    { "area": "Diretoria",          "pilar": "Diretoria" },
+    { "area": "Marketing",          "pilar": "Revenue" },
+    { "area": "Sales",              "pilar": "Revenue" },
+    { "area": "Support",            "pilar": "Revenue", "grupo": "Customer Care" },
+    { "area": "Customer Success",   "pilar": "Revenue", "grupo": "Customer Care" },
+    { "area": "Data Manipulation",  "pilar": "Revenue", "grupo": "Customer Care" },
+    { "area": "Product",            "pilar": "Product & Development" },
+    { "area": "Develop",            "pilar": "Product & Development" },
+    { "area": "Platform",           "pilar": "Product & Development", "grupo": "Develop" },
+    { "area": "Integração",         "pilar": "Product & Development", "grupo": "Services" },
+    { "area": "Automação",          "pilar": "Product & Development", "grupo": "Services" },
+    { "area": "Innovation",         "pilar": "Innovation" },
+    { "area": "People",             "pilar": "People" },
+    { "area": "Admin & Finance",    "pilar": "Business Support" },
+    { "area": "IT",                 "pilar": "Business Support" },
+    { "area": "Legal",              "pilar": "Business Support" }
+  ]
 }

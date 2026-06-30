@@ -25,15 +25,18 @@ def _load(name):
         return json.load(f)
 
 
+_PILAR = {}
+def load_taxonomy():
+    tx = _load("taxonomy.json")
+    for e in tx["areas"]:
+        _PILAR[e["area"]] = e["pilar"]
+        if e.get("grupo"): _PILAR.setdefault(e["grupo"], e["pilar"])
+        _PILAR.setdefault(e["pilar"], e["pilar"])
+    return tx
+
+
 def pilar(a):
-    a = a or ""
-    if a.startswith("Diretoria"): return "Diretoria"
-    if re.search(r"Sales|Marketing|Customer Care|Demand", a): return "Revenue"
-    if re.search(r"Develop|Product|Services|Platform", a): return "Product & Development"
-    if a.startswith("People"): return "People"
-    if a.startswith("Innovation"): return "Innovation"
-    if re.search(r"Admin & Finance|IT|Legal", a): return "Business Support"
-    return "Sem área"
+    return _PILAR.get((a or "").strip(), "Sem área")
 
 
 def fetch_feedz():
@@ -230,7 +233,7 @@ def main():
     conf, st, ov = _load("config.json"), _load("org_style.json"), _load("org_overrides.json")
     people = [norm(e) for e in fetch_feedz()]
     # valida áreas do Feedz contra a taxonomia canônica (taxonomy.json)
-    tax = _load("taxonomy.json"); valid_pilares = set(tax["pilares"].keys())
+    tax = load_taxonomy(); valid_pilares = {e["pilar"] for e in tax["areas"]}
     seen = sorted({p["area"] for p in people if p["area"] and p["area"] != "—"})
     off = [a for a in seen if pilar(a) not in valid_pilares]
     if off:
