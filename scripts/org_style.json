@@ -1,21 +1,11 @@
 {
-  "_comment": "Ajustes visuais do organograma. Editável por quem quiser tunar o desenho.",
-  "box_w": 290,
-  "box_h": 40,
-  "indent": 28,
-  "row": 50,
-  "pad": 18,
+  "_comment": "Ajustes visuais do organograma (layout + cores). Editável.",
   "scale": 2,
-  "show_area": true,
-  "destacar_diretoria": true,
+  "COLW": 214, "RH": 30, "ROWV": 72, "COLV": 184,
+  "mgr_w": 176, "ic_w": 164, "mgr_h": 32, "ic_h": 21, "root_w": 180, "root_h": 36,
   "colors": {
-    "bg": "#FFFFFF",
-    "box": "#F6F8FA",
-    "stroke": "#D7DCE3",
-    "leader_stroke": "#00D256",
-    "diretoria_box": "#E8FBF0",
-    "text": "#16191D",
-    "subtext": "#6B7280",
-    "line": "#BFC6CF"
+    "root": "#111111", "director": "#00D256", "manager": "#D6F8E4", "ic": "#FFFFFF",
+    "border": "#00B84C", "ic_border": "#E2E6E2", "line": "#BFC9C0",
+    "ink": "#16231A", "root_sub": "#BFE9CF", "mgr_sub": "#3C5A48"
   }
 }

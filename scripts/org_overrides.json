@@ -1,0 +1,14 @@
+{
+  "_comment": "Ajustes manuais que o Feedz não modela. Edite à vontade.",
+  "grupos": [
+    { "nome": "Revenue", "lider_nome": "Rodrigo Kautzmann", "pilares": ["Revenue"] }
+  ],
+  "direcao": {
+    "Revenue": "L",
+    "Product & Development": "R",
+    "Innovation": "R",
+    "People": "B",
+    "Business Support": "B"
+  },
+  "direcao_default": "R"
+}
