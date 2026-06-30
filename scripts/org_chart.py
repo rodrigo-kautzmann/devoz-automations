@@ -229,6 +229,13 @@ def confluence_embed(base, auth, pid, fname, catalogo, n):
 def main():
     conf, st, ov = _load("config.json"), _load("org_style.json"), _load("org_overrides.json")
     people = [norm(e) for e in fetch_feedz()]
+    # valida áreas do Feedz contra a taxonomia canônica (taxonomy.json)
+    tax = _load("taxonomy.json"); valid_pilares = set(tax["pilares"].keys())
+    seen = sorted({p["area"] for p in people if p["area"] and p["area"] != "—"})
+    off = [a for a in seen if pilar(a) not in valid_pilares]
+    if off:
+        print("AVISO: áreas do Feedz fora da taxonomia canônica (sem pilar):", off)
+    print("Áreas do Feedz -> pilar:", {a: pilar(a) for a in seen})
     people, byid, kids, ceo, unit_of = build(people, ov)
     if not ceo:
         print("ERRO: não encontrei o CEO/raiz."); return 1

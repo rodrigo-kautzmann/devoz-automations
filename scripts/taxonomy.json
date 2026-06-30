@@ -1,0 +1,11 @@
+{
+  "_doc": "Lista CANÔNICA de áreas válidas da DevOZ. Fonte única — planilhas, organograma e diretório leem daqui. Mantida alinhada aos Departamentos do Feedz (RH). 'Quais áreas existem' = aqui; 'em que área cada pessoa está' = Feedz.",
+  "pilares": {
+    "Diretoria": ["Diretoria"],
+    "Revenue": ["Marketing", "Sales", "Demand Generation", "Customer Care / Support", "Customer Care / Customer Success", "Customer Care / Data Manipulation"],
+    "Product & Development": ["Product", "Develop", "Develop / Platform", "Services", "Services / Integração", "Services / Automação"],
+    "Innovation": ["Innovation"],
+    "People": ["People"],
+    "Business Support": ["Admin & Finance", "IT", "Legal"]
+  }
+}
