@@ -28,10 +28,11 @@ def _load(name):
 _PILAR = {}
 def load_taxonomy():
     tx = _load("taxonomy.json")
-    for e in tx["areas"]:
-        _PILAR[e["area"]] = e["pilar"]
-        if e.get("grupo"): _PILAR.setdefault(e["grupo"], e["pilar"])
-        _PILAR.setdefault(e["pilar"], e["pilar"])
+    for t in tx["times"]:           # Área (L1) <- Time (L2) <- Grupo (L3)
+        _PILAR[t["time"]] = t["area"]
+        _PILAR.setdefault(t["area"], t["area"])
+        for gp in t.get("grupos", []):
+            _PILAR.setdefault(gp, t["area"])
     return tx
 
 
@@ -233,7 +234,7 @@ def main():
     conf, st, ov = _load("config.json"), _load("org_style.json"), _load("org_overrides.json")
     people = [norm(e) for e in fetch_feedz()]
     # valida áreas do Feedz contra a taxonomia canônica (taxonomy.json)
-    tax = load_taxonomy(); valid_pilares = {e["pilar"] for e in tax["areas"]}
+    tax = load_taxonomy(); valid_pilares = {t["area"] for t in tax["times"]}
     seen = sorted({p["area"] for p in people if p["area"] and p["area"] != "—"})
     off = [a for a in seen if pilar(a) not in valid_pilares]
     if off:
