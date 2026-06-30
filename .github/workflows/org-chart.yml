@@ -1,17 +1,17 @@
-name: directory-sync
+name: org-chart
 
 on:
   schedule:
-    - cron: "0 8 * * *"   # 08:00 UTC = 05:00 BRT (madrugada)
+    - cron: "30 8 * * *"   # 05:30 BRT, logo após o directory-sync
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Só simular (não grava no Confluence)"
+        description: "Só gerar o PNG (artifact), sem publicar no Confluence"
         type: boolean
-        default: false
+        default: true
 
 jobs:
-  sync:
+  org:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,11 +20,15 @@ jobs:
           python-version: "3.12"
       - name: Instalar dependências
         run: pip install -r scripts/requirements.txt
-      - name: Sincronizar Diretório
+      - name: Gerar organograma
         env:
-          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
-          GOOGLE_ADMIN_EMAIL: ${{ secrets.GOOGLE_ADMIN_EMAIL }}
+          FEEDZ_API_TOKEN: ${{ secrets.FEEDZ_API_TOKEN }}
           CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
           CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
-        run: python scripts/sync_directory.py
+        run: python scripts/org_chart.py
+      - name: Publicar PNG como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: organograma
+          path: organograma.png

@@ -31,6 +31,11 @@ def load_area_map():
     return d["map"], d["pilar_order"]
 
 
+def load_config():
+    with open(os.path.join(HERE, "config.json"), encoding="utf-8") as f:
+        return json.load(f)
+
+
 def get_users():
     info = json.loads(os.environ["GOOGLE_SA_JSON"])
     creds = service_account.Credentials.from_service_account_info(
@@ -109,9 +114,47 @@ def render_body(rows):
     return "".join(parts)
 
 
-def confluence_update(body):
-    base = os.environ["CONFLUENCE_BASE_URL"].rstrip("/")
-    pid = os.environ["CONFLUENCE_PAGE_ID"]
+def render_org(users, area_map):
+    people = [extract(u) for u in users]
+    people = [p for p in people if not p["suspended"] and (p["title"] or p["dept"])]
+    by = {p["email"]: p for p in people}
+    kids = {}
+    roots = []
+    for p in people:
+        m = p["mgr"]
+        if m and m in by and m != p["email"]:
+            kids.setdefault(m, []).append(p)
+        else:
+            roots.append(p)
+
+    def label(p):
+        area = area_map.get(p["dept"], ["", p["dept"]])[1] or p["dept"] or "\u2014"
+        cargo = p["title"] or "\u2014"
+        return f"<strong>{html.escape(p['name'])}</strong> \u2014 {html.escape(cargo)} \u00b7 <em>{html.escape(area)}</em>"
+
+    def node(p):
+        out = [f"<li><p>{label(p)}</p>"]
+        ch = sorted(kids.get(p["email"], []), key=lambda x: x["name"])
+        if ch:
+            out.append("<ul>")
+            out += [node(c) for c in ch]
+            out.append("</ul>")
+        out.append("</li>")
+        return "".join(out)
+
+    roots.sort(key=lambda x: (x["name"] != "Rodrigo Kautzmann", x["name"]))
+    today = datetime.date.today().strftime("%d/%m/%Y")
+    parts = [panel("info", f'<p><strong>Organograma gerado automaticamente em {today}</strong> '
+                           'a partir do Google Workspace, pela skill workspace-directory-sync. '
+                           'Hierarquia montada pelo campo gerente. View gerada \u2014 n\u00e3o edite \u00e0 m\u00e3o.</p>')]
+    parts.append("<h2>Organograma</h2><ul>")
+    parts += [node(r) for r in roots]
+    parts.append("</ul>")
+    return "".join(parts)
+
+
+def confluence_update(body, pid, base):
+    base = base.rstrip("/")
     auth = (os.environ["CONFLUENCE_EMAIL"], os.environ["CONFLUENCE_API_TOKEN"])
     g = requests.get(f"{base}/rest/api/content/{pid}?expand=version", auth=auth, timeout=30)
     g.raise_for_status()
@@ -129,7 +172,8 @@ def confluence_update(body):
 
 def main():
     area_map, pilar_order = load_area_map()
-    rows = build_rows(get_users(), area_map, pilar_order)
+    users = get_users()
+    rows = build_rows(users, area_map, pilar_order)
     body = render_body(rows)
     dry = os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes")
     print(f"{len(rows)} pessoas montadas.")
@@ -141,8 +185,11 @@ def main():
         for r in rows[:10]:
             print("  ", r)
         return
-    ver = confluence_update(body)
-    print(f"Página atualizada para a versão {ver}.")
+    cfg = load_config()
+    base = cfg["confluence_base_url"]
+    ver = confluence_update(body, cfg["directory_page_id"], base)
+    print(f"Diretório atualizado para a versão {ver}.")
+    # O Organograma (página filha) é gerado pelo org_chart.py a partir do Feedz.
 
 
 if __name__ == "__main__":

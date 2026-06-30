@@ -1,0 +1,21 @@
+{
+  "_comment": "Ajustes visuais do organograma. Editável por quem quiser tunar o desenho.",
+  "box_w": 290,
+  "box_h": 40,
+  "indent": 28,
+  "row": 50,
+  "pad": 18,
+  "scale": 2,
+  "show_area": true,
+  "destacar_diretoria": true,
+  "colors": {
+    "bg": "#FFFFFF",
+    "box": "#F6F8FA",
+    "stroke": "#D7DCE3",
+    "leader_stroke": "#00D256",
+    "diretoria_box": "#E8FBF0",
+    "text": "#16191D",
+    "subtext": "#6B7280",
+    "line": "#BFC6CF"
+  }
+}
