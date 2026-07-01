@@ -230,9 +230,15 @@ def render(nodes, kids, ceo):
     W = int(max(bb(i)[2] for i in allids) + sx + PAD); H = int(max(bb(i)[3] for i in allids) + sy + PAD)
     img = Image.new("RGB", (W * SC, H * SC), "#FFFFFF"); dr = ImageDraw.Draw(img)
 
+    _FONTS = {
+        False: ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf", "/Library/Fonts/Arial.ttf"],
+        True: ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf", "/Library/Fonts/Arial Bold.ttf"],
+    }
     def F(s, b=False):
-        try: return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans%s.ttf" % ("-Bold" if b else ""), int(s * SC))
-        except Exception: return ImageFont.load_default()
+        for p in _FONTS[b]:
+            try: return ImageFont.truetype(p, int(s * SC))
+            except Exception: continue
+        return ImageFont.load_default()
     def SS(v): return int(v * SC)
     def C(i): cx, cy = pos[i]; return cx + sx, cy + sy
     def rr(x, y, w, h, rad, fill, ol=None, wd=1):
@@ -290,17 +296,20 @@ def confluence_attach(base, auth, pid, fname, data):
     requests.post(url, headers=h, files={"file": (fname, data, "image/png")}, data={"minorEdit": "true"}, auth=auth, timeout=60).raise_for_status()
 
 
-def confluence_embed(base, auth, pid, fname, catalogo, n):
+def confluence_embed(base, auth, pid, fname, conf, n):
     base = base.rstrip("/"); today = datetime.date.today().strftime("%d/%m/%Y")
-    body = (f'<ac:structured-macro ac:name="info"><ac:rich-text-body><p>'
-            f'<strong>Organograma gerado automaticamente em {today}</strong> ({n} nós) por '
-            f'<code>org-chart</code> (repo devoz-automations), a partir do Feedz. View gerada — não edite à mão. '
-            f'<a href="{catalogo}">Ver catálogo de automações</a>.</p></ac:rich-text-body></ac:structured-macro>'
-            f'<p><ac:image><ri:attachment ri:filename="{fname}" /></ac:image></p>')
+    intro = conf.get("org_page_intro_storage", ""); footer = conf.get("org_page_footer_storage", "")
+    catalogo = conf.get("catalogo_url", "")
+    panel = ('<ac:structured-macro ac:name="info"><ac:rich-text-body><p>'
+             f'<strong>Organograma — atualizado em {today}</strong> ({n} nós), gerado pela automação '
+             f'<code>org-chart</code> (repo devoz-automations). View gerada — não edite à mão. '
+             f'<a href="{catalogo}">Ver catálogo de automações</a>.</p></ac:rich-text-body></ac:structured-macro>')
+    image = f'<p><ac:image><ri:attachment ri:filename="{fname}" /></ac:image></p>'
+    body = intro + panel + image + footer
     g = requests.get(f"{base}/rest/api/content/{pid}", params={"expand": "version"}, auth=auth, timeout=30); g.raise_for_status()
     cur = g.json()
     payload = {"id": pid, "type": "page", "title": cur["title"],
-               "version": {"number": cur["version"]["number"] + 1, "message": "Organograma (estrutural, Feedz) atualizado"},
+               "version": {"number": cur["version"]["number"] + 1, "message": "Organograma atualizado"},
                "body": {"storage": {"value": body, "representation": "storage"}}}
     r = requests.put(f"{base}/rest/api/content/{pid}", json=payload, auth=auth, timeout=30); r.raise_for_status()
     return r.json()["version"]["number"]
@@ -335,7 +344,7 @@ def main():
     auth = (os.environ["CONFLUENCE_EMAIL"], os.environ["CONFLUENCE_API_TOKEN"])
     base = conf["confluence_base_url"]; fname = "organograma.png"
     confluence_attach(base, auth, conf["org_page_id"], fname, png)
-    ver = confluence_embed(base, auth, conf["org_page_id"], fname, conf.get("catalogo_url", ""), n)
+    ver = confluence_embed(base, auth, conf["org_page_id"], fname, conf, n)
     print(f"Publicado no Confluence (versão {ver}).")
     return 0
 
