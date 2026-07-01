@@ -1,8 +1,10 @@
 name: directory-sync
 
 on:
-  schedule:
-    - cron: "0 8 * * *"   # 08:00 UTC = 05:00 BRT (madrugada)
+  # Agendamento diário PAUSADO em 2026-07-01 até a limpeza do Feedz (ver IFD no Jira).
+  # Para religar, descomente o bloco schedule abaixo.
+  # schedule:
+  #   - cron: "0 8 * * *"   # 08:00 UTC = 05:00 BRT (madrugada)
   workflow_dispatch:
     inputs:
       dry_run:

@@ -2,5 +2,11 @@
   "confluence_base_url": "https://ozmap.atlassian.net/wiki",
   "directory_page_id": "2246836238",
   "org_page_id": "2251751442",
-  "catalogo_url": "https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2245033997"
+  "catalogo_url": "https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2245033997",
+  "director_area": {
+    "rodrigo.kautzmann@ozmap.com": "Diretoria",
+    "daniel.iwata@ozmap.com": "Business Support",
+    "jose.raupp@ozmap.com": "Innovation",
+    "mateus.souza@ozmap.com": "Product & Develop"
+  }
 }

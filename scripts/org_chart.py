@@ -1,23 +1,41 @@
 #!/usr/bin/env python3
-"""Gera o Organograma da DevOZ (PNG radial) a partir do Feedz e publica no Confluence.
+"""Gera o Organograma ESTRUTURAL da DevOZ (PNG radial) e publica no Confluence.
 
-- Lê colaboradores na API do Feedz (somente leitura; IGNORA remuneração).
-- Monta a hierarquia pelo gestor direto.
-- Aplica overrides (org_overrides.json): agrupamentos (ex.: Revenue + líder) e
-  direção de cada pilar no layout (L/R/T/B).
-- Cor por STATUS (diretor / gestor / pessoa), não por nível.
-- Desenha PNG (Pillow), sobe como anexo na página Organograma e injeta selo de proveniência.
+Modelo (decidido 2026-07-01): DevOZ → Área → Time → Grupo → pessoas.
+- Só unidades com pessoas/responsável viram caixa. Funções/lentes (Recruiting,
+  Innovation interna/externa, Sales Brazil/LATAM/ROW) NÃO entram (ver páginas de área).
+- Times e Grupos vêm do taxonomy.json (esqueleto completo; vazios aparecem em cinza).
+- Líder de Área = Diretor; de Time = Gestor; de Grupo = Líder (destacado, sem estrela).
+- REDE DE SEGURANÇA: quem tiver Time/Grupo inválido é colocado no nível válido acima
+  e o script AVISA (nunca some ninguém do organograma).
+- Layout congelado: Revenue à esquerda; Product & Develop à direita;
+  People, Business Support e Innovation embaixo (Innovation mais à direita).
 
-Env: FEEDZ_API_TOKEN, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN, DRY_RUN
-Config (não-secreto): config.json, org_style.json, org_overrides.json
+Fontes de dados (env ORG_SOURCE):
+- "feedz" (padrão): API do Feedz. Time = departamento; Grupo = 1º group canônico;
+  Área derivada do Time (taxonomy) ou de config director_area p/ diretores;
+  Papel = Líder se a pessoa tem subordinados diretos, senão Liderado.
+  IGNORA remuneração. Requer Feedz LIMPO (ver roteiro-faxina-feedz / Jira IFD).
+- "csv": arquivo pipe "nome|area|time|grupo|papel" em ORG_CSV (uso interino).
+
+Env: FEEDZ_API_TOKEN, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN, DRY_RUN, ORG_SOURCE, ORG_CSV
+Config (não-secreto): config.json, taxonomy.json
 """
-import os, sys, json, re, datetime
-from collections import Counter
+import os, sys, json, datetime, io
+from collections import defaultdict
 import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FEEDZ_EMPLOYEES = "https://app.feedz.com.br/v2/integracao/employees"
-DIRECTOR = re.compile(r"\b(CEO|CTO|CFO|CIO|COO|CRO|CMO)\b|Chief|Diretor", re.I)
+
+# ---- layout congelado ----
+DIRORDER = ["Revenue", "Product & Develop", "People", "Business Support", "Innovation"]
+DIR = {"Revenue": "L", "Product & Develop": "R", "Innovation": "B", "People": "B", "Business Support": "B"}
+# cores
+ROOT_BG = "#111111"; PILAR = "#00D256"; MGRC = "#D6F8E4"; GRP = "#EAFBF2"; ICBG = "#FFFFFF"
+BORDER = "#00B84C"; GLEAD = "#00902E"; ICB = "#E2E6E2"; LINE = "#BFC9C0"; INK = "#16231A"
+MUTEBG = "#F1F3F1"; MUTEBD = "#C9D0C9"; MUTETX = "#9AA69C"
+COLW = 214; RH = 34; ROWV = 72; COLV = 204; ROOTW, ROOTH = 182, 36; SC = 2
 
 
 def _load(name):
@@ -25,186 +43,244 @@ def _load(name):
         return json.load(f)
 
 
-_PILAR = {}
 def load_taxonomy():
     tx = _load("taxonomy.json")
-    for t in tx["times"]:           # Área (L1) <- Time (L2) <- Grupo (L3)
-        _PILAR[t["time"]] = t["area"]
-        _PILAR.setdefault(t["area"], t["area"])
-        for gp in t.get("grupos", []):
-            _PILAR.setdefault(gp, t["area"])
-    return tx
+    area_times = defaultdict(list); time_grupos = {}; time_area = {}
+    for t in tx["times"]:
+        if t["area"] == "Diretoria":
+            continue
+        area_times[t["area"]].append(t["time"])
+        time_grupos[t["time"]] = t.get("grupos", [])
+        time_area[t["time"]] = t["area"]
+    return area_times, time_grupos, time_area
 
 
-def pilar(a):
-    return _PILAR.get((a or "").strip(), "Sem área")
-
-
-def fetch_feedz():
+# ---------- fontes de dados -> linhas {name, area, time, grupo, papel} ----------
+def rows_from_feedz(area_times, time_grupos, time_area, director_area):
     tok = os.environ["FEEDZ_API_TOKEN"]
     r = requests.get(FEEDZ_EMPLOYEES,
-                     headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"},
-                     timeout=60)
+                     headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, timeout=60)
     r.raise_for_status()
-    d = r.json()
-    return d if isinstance(d, list) else d.get("data", [])
+    d = r.json(); emps = d if isinstance(d, list) else d.get("data", [])
 
-
-def norm(e):
-    def dig(d, *ks):
+    def dig(o, *ks):
         for k in ks:
-            d = d.get(k) if isinstance(d, dict) else None
-            if d is None: return None
-        return d
-    dept = dig(e, "department_data", "name") or (e.get("department") if isinstance(e.get("department"), str) else dig(e, "department", "name")) or ""
-    cargo = dig(e, "job_description", "title") or ""
-    mgr_email = (dig(e, "direct_manager", "email") or "").lower()
-    mgr_name = dig(e, "direct_manager", "name") or (e.get("manager") if isinstance(e.get("manager"), str) else "") or ""
-    return {"name": (e.get("full_name") or e.get("name") or "").strip(),
-            "email": (e.get("email") or "").lower(),
-            "cargo": (cargo or "").strip() or "—",
-            "area": (dept or "").strip() or "—",
-            "mgr": mgr_email, "mgr_name": mgr_name,
-            "status": e.get("status", "Ativo")}
+            o = o.get(k) if isinstance(o, dict) else None
+            if o is None: return None
+        return o
+
+    def is_active(e):
+        s = e.get("status", "Ativo")
+        return str(s).lower().startswith("ativ") or s in (0, "0", 1, "1", True)
+
+    emps = [e for e in emps if is_active(e)]
+    # subordinados diretos (para inferir Papel)
+    reports = defaultdict(int)
+    for e in emps:
+        m = (dig(e, "direct_manager", "email") or "").lower()
+        if m: reports[m] += 1
+
+    valid_grupos = set(g for gs in time_grupos.values() for g in gs)
+    rows = []
+    for e in emps:
+        name = (e.get("full_name") or e.get("name") or "").strip()
+        email = (e.get("email") or "").lower()
+        dept = (dig(e, "department_data", "name") or (e.get("department") if isinstance(e.get("department"), str) else "") or "").strip()
+        groups = e.get("groups") or []
+        gnames = [(g.get("name") if isinstance(g, dict) else str(g)).strip() for g in groups] if isinstance(groups, list) else []
+        # Time / Área
+        if email in director_area:                    # diretores: dept costuma ser "Diretoria"
+            area = director_area[email]; time = ""
+        elif dept in time_area:                        # departamento é um Time canônico
+            time = dept; area = time_area[dept]
+        elif dept in area_times:                       # departamento é uma Área-folha (People/Innovation)
+            area = dept; time = ""
+        else:                                          # desconhecido: deixa a rede de segurança agir
+            area = dept or "—"; time = dept
+        # Grupo = 1º group que é válido para o Time
+        grupo = next((g for g in gnames if time in time_grupos and g in time_grupos[time]), "")
+        # Papel: tem subordinados => Líder do seu nível; senão Liderado
+        papel = "Líder" if reports.get(email, 0) > 0 else "Liderado"
+        if area == "Diretoria":                        # CEO
+            papel = "Líder"
+        rows.append({"name": name, "area": area, "time": time, "grupo": grupo, "papel": papel})
+    return rows
 
 
-def build(people, ov):
-    people = [p for p in people if str(p["status"]).lower().startswith("ativ") or p["status"] in (0, "0")]
-    byid = {p["email"]: p for p in people if p["email"]}
-    # root = CEO (ou quem não tem gestor)
-    roots = [p for p in people if not p["mgr"] or p["mgr"] not in byid]
-    ceo = next((p for p in people if DIRECTOR.search(p["cargo"]) and "CEO" in p["cargo"].upper()), None) or (roots[0] if roots else None)
-    for r in roots:
-        if ceo and r["email"] != ceo["email"]:
-            r["mgr"] = ceo["email"]
-    # kids
-    def rebuild_kids():
-        k = {}
-        for p in people:
-            if p["mgr"] and p["mgr"] in byid and p["mgr"] != p["email"]:
-                k.setdefault(p["mgr"], []).append(p)
-        return k
-    kids = rebuild_kids()
-
-    def unit_of(p):
-        reps = kids.get(p["email"], [])
-        if not reps: return None
-        if p.get("display_unit"): return p["display_unit"]
-        if (p["area"] or "").startswith("Diretoria"):
-            return Counter(pilar(r["area"]) for r in reps).most_common(1)[0][0]
-        return p["area"]
-
-    # ---- overrides: grupos (ex.: Revenue) ----
-    for g in ov.get("grupos", []):
-        pilset = set(g.get("pilares", []))
-        syn_email = "__grp_" + g["nome"].lower().replace(" ", "_") + "__"
-        syn = {"name": g["nome"], "email": syn_email, "cargo": "CEO" if g.get("lider_nome") else "",
-               "area": g["nome"], "mgr": ceo["email"] if ceo else "", "mgr_name": "",
-               "status": "Ativo", "display_unit": g["nome"],
-               "display_name": g.get("lider_nome", ""), "force_director": True}
-        moved = False
-        for c in list(kids.get(ceo["email"], []) if ceo else []):
-            if (unit_of(c) in pilset) or (pilar(c["area"]) in pilset):
-                c["mgr"] = syn_email
-                moved = True
-        if moved:
-            people.append(syn); byid[syn_email] = syn
-            kids = rebuild_kids()
-    return people, byid, kids, ceo, unit_of
+def rows_from_csv(path):
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for ln in f:
+            ln = ln.strip()
+            if not ln or ln.startswith("#"): continue
+            a = (ln.split("|") + [""] * 5)[:5]
+            rows.append({"name": a[0].strip(), "area": a[1].strip(), "time": a[2].strip(),
+                         "grupo": a[3].strip(), "papel": a[4].strip()})
+    return rows
 
 
-def is_director(p):
-    return bool(p.get("force_director")) or bool(DIRECTOR.search(p.get("cargo", "") or ""))
+# ---------- montagem estrutural + rede de segurança ----------
+def build_nodes(rows, area_times, time_grupos):
+    nodes = {}; kids = defaultdict(list)
 
+    def mk(nid, typ, area, label, leader="", papel_leaf=""):
+        nodes[nid] = {"name": nid, "type": typ, "area": area, "label": label,
+                      "leader": leader, "papel_leaf": papel_leaf}
+        return nid
 
-def render(people, kids, ceo, unit_of, st, ov):
-    from PIL import Image, ImageDraw, ImageFont
-    SC = st["scale"]; COLW, RH, ROWV, COLV = st["COLW"], st["RH"], st["ROWV"], st["COLV"]
-    MGRW, ICW, MGRH, ICH, ROOTW, ROOTH = st["mgr_w"], st["ic_w"], st["mgr_h"], st["ic_h"], st["root_w"], st["root_h"]
-    c = st["colors"]
-    def rgb(h): return tuple(int(h[i:i+2], 16) for i in (1, 3, 5))
-    isleaf = lambda p: not kids.get(p["email"])
-    boxw = lambda p: ICW if isleaf(p) else MGRW
-    boxh = lambda p: ICH if isleaf(p) else MGRH
+    ceo = next((p["name"] for p in rows if p["area"] == "Diretoria"), "DevOZ")
+    mk(ceo, "root", "Diretoria", "DevOZ", ceo)
 
-    CNT = {"L": [0], "R": [0], "T": [0], "B": [0]}
-    alln = []
-    def assign(p, prim, region):
-        p["prim"] = prim; p["region"] = region; alln.append(p)
-        ch = kids.get(p["email"], [])
-        if not ch:
-            cc = CNT[region]; p["cross"] = cc[0]; cc[0] += 1
+    def person_node(p, parent, suffix):
+        pid = mk(p["name"] + "##" + suffix, "person", p["area"], p["name"], papel_leaf=p["papel"])
+        kids[parent].append(pid)
+
+    warn = []; anode = {}; tnode = {}; gnode = {}; leaders = {ceo}
+    for area in DIRORDER:
+        az = [p for p in rows if p["area"] == area]
+        diretor = next((p for p in az if p["papel"] == "Líder" and not p["time"]), None)
+        dname = diretor["name"] if diretor else ("Rodrigo Kautzmann" if area == "Revenue" else "")
+        if diretor: leaders.add(diretor["name"])
+        anid = mk("A::" + area, "area", area, area, dname); kids[ceo].append(anid); anode[area] = anid
+        for time in area_times.get(area, []):
+            tz = [p for p in az if p["time"] == time]
+            gestor = next((p for p in tz if p["papel"] == "Líder" and not p["grupo"]), None)
+            if gestor: leaders.add(gestor["name"])
+            tnid = mk("T::%s::%s" % (area, time), "time", area, time, gestor["name"] if gestor else "")
+            kids[anid].append(tnid); tnode[(area, time)] = tnid
+            for grupo in time_grupos.get(time, []):
+                gz = [p for p in tz if p["grupo"] == grupo]
+                glider = next((p for p in gz if p["papel"] == "Líder"), None)
+                if glider: leaders.add(glider["name"])
+                gnid = mk("G::%s::%s::%s" % (area, time, grupo), "grupo", area, grupo, glider["name"] if glider else "")
+                kids[tnid].append(gnid); gnode[(area, time, grupo)] = gnid
+
+    placed = set(leaders)
+    for p in rows:
+        if p["name"] in leaders or p["area"] == "Diretoria":
+            continue
+        area, time, grupo = p["area"], p["time"], p["grupo"]
+        if area not in anode:
+            warn.append("%s: área inválida '%s' -> ligado ao DevOZ" % (p["name"], area)); person_node(p, ceo, "root")
+        elif not time:
+            person_node(p, anode[area], area)
+        elif (area, time) not in tnode:
+            warn.append("%s: time inválido '%s' em %s -> nível da área" % (p["name"], time, area)); person_node(p, anode[area], area)
+        elif not grupo:
+            person_node(p, tnode[(area, time)], time)
+        elif (area, time, grupo) in gnode:
+            person_node(p, gnode[(area, time, grupo)], grupo)
         else:
-            for x in ch: assign(x, prim + 1, region)
-            p["cross"] = (ch[0]["cross"] + ch[-1]["cross"]) / 2
-    rch = kids.get(ceo["email"], [])
-    rch.sort(key=lambda x: x["name"])
+            warn.append("%s: grupo inválido '%s' em %s -> nível do time" % (p["name"], grupo, time)); person_node(p, tnode[(area, time)], time)
+        placed.add(p["name"])
+
+    # marca unidades vazias (sem pessoas nem líder)
+    def haspeople(nid):
+        n = nodes[nid]
+        if n["type"] == "person" or n["leader"]: return True
+        return any(haspeople(c) for c in kids.get(nid, []))
+    for nid in list(nodes):
+        nodes[nid]["empty"] = nodes[nid]["type"] in ("time", "grupo") and not haspeople(nid)
+
+    total = len({p["name"] for p in rows}); missing = [p["name"] for p in rows if p["name"] not in placed]
+    return nodes, kids, ceo, warn, len(placed), total, missing
+
+
+# ---------- render ----------
+def render(nodes, kids, ceo):
+    from PIL import Image, ImageDraw, ImageFont
+
+    def rgb(h): return tuple(int(h[i:i + 2], 16) for i in (1, 3, 5))
+    def bw(n): return 164 if n["type"] == "person" else 182
+    def bh(n): return 20 if n["type"] == "person" else 32
+
+    alln = []; CNT = {"L": [0], "R": [0], "T": [0], "B": [0]}
+
+    def assign(nid, prim, reg):
+        n = nodes[nid]; n["prim"] = prim; n["reg"] = reg; alln.append(nid)
+        ch = kids.get(nid, [])
+        if not ch:
+            c = CNT[reg]; n["cross"] = c[0]; c[0] += 1
+        else:
+            for x in ch: assign(x, prim + 1, reg)
+            n["cross"] = (nodes[ch[0]]["cross"] + nodes[ch[-1]]["cross"]) / 2
+
     branch = {}
-    for b in rch:
-        d = ov["direcao"].get(unit_of(b) or "", ov.get("direcao_default", "R"))
-        branch.setdefault(d, []).append(b)
+    for anid in kids[ceo]:
+        branch.setdefault(DIR.get(nodes[anid]["area"], "R"), []).append(anid)
     for reg in ["L", "R", "T", "B"]:
-        for b in branch.get(reg, []): assign(b, 0, reg)
-    mc = {k: (max([n["cross"] for n in alln if n["region"] == k], default=0)) for k in CNT}
-    BAND = max(mc["L"], mc["R"]) * RH / 2 + 12
-    GAPX = ROOTW / 2 + 34; GAPY = ROOTH / 2 + 34
+        for anid in branch.get(reg, []): assign(anid, 0, reg)
+
+    mc = {k: max([nodes[i]["cross"] for i in alln if nodes[i]["reg"] == k], default=0) for k in CNT}
+    BAND = max(mc["L"], mc["R"]) * RH / 2 + 12; GAPX = ROOTW / 2 + 34; GAPY = ROOTH / 2 + 34
     pos = {}
-    for n in alln:
-        r = n["region"]; w = boxw(n); h = boxh(n)
-        if r == "R": pos[n["email"]] = (GAPX + n["prim"] * COLW + w / 2, (n["cross"] - mc["R"] / 2) * RH)
-        elif r == "L": pos[n["email"]] = (-(GAPX + n["prim"] * COLW + w / 2), (n["cross"] - mc["L"] / 2) * RH)
-        elif r == "B": pos[n["email"]] = ((n["cross"] - mc["B"] / 2) * COLV, BAND + GAPY + n["prim"] * ROWV + h / 2)
-        else: pos[n["email"]] = ((n["cross"] - mc["T"] / 2) * COLV, -(BAND + GAPY + n["prim"] * ROWV + h / 2))
-    pos[ceo["email"]] = (0, 0)
-    allp = alln + [ceo]
-    def bb(n):
-        cx, cy = pos[n["email"]]; w = ROOTW if n is ceo else boxw(n); h = ROOTH if n is ceo else boxh(n)
+    for i in alln:
+        n = nodes[i]; r = n["reg"]; w = bw(n); h = bh(n)
+        if r == "R": pos[i] = (GAPX + n["prim"] * COLW + w / 2, (n["cross"] - mc["R"] / 2) * RH)
+        elif r == "L": pos[i] = (-(GAPX + n["prim"] * COLW + w / 2), (n["cross"] - mc["L"] / 2) * RH)
+        elif r == "B": pos[i] = ((n["cross"] - mc["B"] / 2) * COLV, BAND + GAPY + n["prim"] * ROWV + h / 2)
+        else: pos[i] = ((n["cross"] - mc["T"] / 2) * COLV, -(BAND + GAPY + n["prim"] * ROWV + h / 2))
+    pos[ceo] = (0, 0); allids = alln + [ceo]
+
+    def bb(i):
+        n = nodes[i]; cx, cy = pos[i]; w = ROOTW if i == ceo else bw(n); h = ROOTH if i == ceo else bh(n)
         return cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2
     PAD = 26
-    sx = PAD - min(bb(n)[0] for n in allp); sy = PAD - min(bb(n)[1] for n in allp)
-    W = int(max(bb(n)[2] for n in allp) + sx + PAD); H = int(max(bb(n)[3] for n in allp) + sy + PAD)
+    sx = PAD - min(bb(i)[0] for i in allids); sy = PAD - min(bb(i)[1] for i in allids)
+    W = int(max(bb(i)[2] for i in allids) + sx + PAD); H = int(max(bb(i)[3] for i in allids) + sy + PAD)
     img = Image.new("RGB", (W * SC, H * SC), "#FFFFFF"); dr = ImageDraw.Draw(img)
-    def F(sz, bold=False):
-        try: return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans%s.ttf" % ("-Bold" if bold else ""), int(sz * SC))
+
+    def F(s, b=False):
+        try: return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans%s.ttf" % ("-Bold" if b else ""), int(s * SC))
         except Exception: return ImageFont.load_default()
-    def S(v): return int(v * SC)
-    def C(n): cx, cy = pos[n["email"]]; return cx + sx, cy + sy
-    def rr(x, y, w, h, rad, fill, outline=None, width=1):
-        dr.rounded_rectangle([S(x), S(y), S(x + w), S(y + h)], radius=S(rad),
-                             fill=rgb(fill) if fill else None, outline=rgb(outline) if outline else None, width=max(1, int(width * SC)))
-    def tx(x, y, s, sz, fill, bold=False): dr.text((S(x), S(y)), s, font=F(sz, bold), fill=rgb(fill))
-    def ln(a, b): dr.line([(S(a[0]), S(a[1])), (S(b[0]), S(b[1]))], fill=rgb(c["line"]), width=max(1, int(1.5 * SC)))
-    def tc(s, n): return s if len(s) <= n else s[:n - 1] + "…"
-    for p in allp:
-        for ch in kids.get(p["email"], []):
-            pcx, pcy = C(p); ccx, ccy = C(ch); reg = ch["region"]
-            pw = ROOTW if p is ceo else boxw(p); ph = ROOTH if p is ceo else boxh(p)
-            cw = boxw(ch); chh = boxh(ch)
+    def SS(v): return int(v * SC)
+    def C(i): cx, cy = pos[i]; return cx + sx, cy + sy
+    def rr(x, y, w, h, rad, fill, ol=None, wd=1):
+        dr.rounded_rectangle([SS(x), SS(y), SS(x + w), SS(y + h)], radius=SS(rad),
+                             fill=rgb(fill) if fill else None, outline=rgb(ol) if ol else None, width=max(1, int(wd * SC)))
+    def tx(x, y, s, sz, fill, b=False): dr.text((SS(x), SS(y)), s, font=F(sz, b), fill=rgb(fill))
+    def tr(s, n): return s if len(s) <= n else s[:n - 1] + "…"
+    def ln(a, b): dr.line([(SS(a[0]), SS(a[1])), (SS(b[0]), SS(b[1]))], fill=rgb(LINE), width=max(1, int(1.4 * SC)))
+
+    for i in allids:
+        for c in kids.get(i, []):
+            pcx, pcy = C(i); ccx, ccy = C(c); reg = nodes[c]["reg"]
+            pw = ROOTW if i == ceo else bw(nodes[i]); ph = ROOTH if i == ceo else bh(nodes[i])
+            cw = bw(nodes[c]); chh = bh(nodes[c])
             if reg in ("R", "L"):
                 x1 = pcx + (pw / 2 if reg == "R" else -pw / 2); x2 = ccx + (-cw / 2 if reg == "R" else cw / 2); mx = (x1 + x2) / 2
                 ln((x1, pcy), (mx, pcy)); ln((mx, pcy), (mx, ccy)); ln((mx, ccy), (x2, ccy))
             else:
                 y1 = pcy + (ph / 2 if reg == "B" else -ph / 2); y2 = ccy + (-chh / 2 if reg == "B" else chh / 2)
-                my = ((BAND + sy + GAPY * 0.5) if reg == "B" else (sy - BAND - GAPY * 0.5)) if p is ceo else (y1 + y2) / 2
+                my = ((BAND + sy + GAPY * 0.5) if reg == "B" else (sy - BAND - GAPY * 0.5)) if i == ceo else (y1 + y2) / 2
                 ln((pcx, y1), (pcx, my)); ln((pcx, my), (ccx, my)); ln((ccx, my), (ccx, y2))
-    for p in allp:
-        cx, cy = C(p); u = unit_of(p); nm = p.get("display_name") or p["name"]
-        if p is ceo:
+
+    for i in allids:
+        n = nodes[i]; cx, cy = C(i); t = n["type"]; em = n.get("empty")
+        if t == "root":
             w, h = ROOTW, ROOTH; x, y = cx - w / 2, cy - h / 2
-            rr(x, y, w, h, 8, c["root"]); tx(x + 12, y + 6, "DevOZ", 12, "#FFFFFF", bold=True); tx(x + 12, y + 21, tc(p["name"], 26), 9.5, c["root_sub"])
-        elif is_director(p):
-            w, h = MGRW, MGRH; x, y = cx - w / 2, cy - h / 2
-            rr(x, y, w, h, 8, c["director"]); tx(x + 10, y + 4, tc(u or p["area"], 24), 10, c["ink"], bold=True); tx(x + 10, y + 18, tc(nm, 28), 9, c["ink"])
-        elif not isleaf(p):
-            w, h = MGRW, MGRH; x, y = cx - w / 2, cy - h / 2
-            rr(x, y, w, h, 8, c["manager"], c["border"], 1); tx(x + 10, y + 4, tc(u or p["area"], 24), 10, c["ink"], bold=True); tx(x + 10, y + 18, tc(nm, 28), 9, c["mgr_sub"])
+            rr(x, y, w, h, 8, ROOT_BG); tx(x + 12, y + 6, "DevOZ", 12, "#FFFFFF", True); tx(x + 12, y + 21, tr(n["leader"], 26), 9, "#BFE9CF")
+        elif t == "area":
+            w, h = 182, 32; x, y = cx - w / 2, cy - h / 2
+            rr(x, y, w, h, 8, PILAR); tx(x + 10, y + 4, tr(n["label"], 24), 10, INK, True); tx(x + 10, y + 18, tr(n["leader"] or "—", 28), 9, INK)
+        elif t == "time":
+            w, h = 182, 32; x, y = cx - w / 2, cy - h / 2
+            if em: rr(x, y, w, h, 8, MUTEBG, MUTEBD, 1); tx(x + 10, y + 9, tr(n["label"], 24), 9.5, MUTETX, True)
+            elif n["leader"]: rr(x, y, w, h, 8, MGRC, BORDER, 1); tx(x + 10, y + 4, tr(n["label"], 24), 10, INK, True); tx(x + 10, y + 18, tr(n["leader"], 28), 9, "#3C5A48")
+            else: rr(x, y, w, h, 8, MGRC, BORDER, 1); tx(x + 10, y + 9, tr(n["label"], 24), 10, INK, True)
+        elif t == "grupo":
+            w, h = 182, 30; x, y = cx - w / 2, cy - h / 2
+            if em: rr(x, y, w, h, 7, MUTEBG, MUTEBD, 1); tx(x + 10, y + 8, tr(n["label"], 24), 9, MUTETX, True)
+            elif n["leader"]: rr(x, y, w, h, 7, GRP, BORDER, 2); tx(x + 10, y + 3, tr(n["label"], 24), 9.5, INK, True); tx(x + 10, y + 16, tr(n["leader"], 26), 9, GLEAD, True)
+            else: rr(x, y, w, h, 7, GRP, BORDER, 1); tx(x + 10, y + 8, tr(n["label"], 24), 9.5, INK, True)
         else:
-            w, h = ICW, ICH; x, y = cx - w / 2, cy - h / 2
-            rr(x, y, w, h, 6, c["ic"], c["ic_border"], 1); tx(x + 8, y + 5, tc(nm, 27), 10, c["ink"])
-    import io
-    buf = io.BytesIO(); img.save(buf, format="PNG"); return buf.getvalue(), len([n for n in allp])
+            w, h = 164, 20; x, y = cx - w / 2, cy - h / 2; lead = n.get("papel_leaf") == "Líder"
+            rr(x, y, w, h, 6, ICBG, BORDER if lead else ICB, 2 if lead else 1); tx(x + 7, y + 4, tr(n["label"], 26), 9.5, INK, lead)
+
+    buf = io.BytesIO(); img.save(buf, format="PNG"); return buf.getvalue(), len(allids)
 
 
+# ---------- Confluence ----------
 def confluence_attach(base, auth, pid, fname, data):
     base = base.rstrip("/"); h = {"X-Atlassian-Token": "nocheck"}
     g = requests.get(f"{base}/rest/api/content/{pid}/child/attachment", params={"filename": fname}, auth=auth, timeout=30); g.raise_for_status()
@@ -224,28 +300,35 @@ def confluence_embed(base, auth, pid, fname, catalogo, n):
     g = requests.get(f"{base}/rest/api/content/{pid}", params={"expand": "version"}, auth=auth, timeout=30); g.raise_for_status()
     cur = g.json()
     payload = {"id": pid, "type": "page", "title": cur["title"],
-               "version": {"number": cur["version"]["number"] + 1, "message": "Organograma (Feedz) atualizado"},
+               "version": {"number": cur["version"]["number"] + 1, "message": "Organograma (estrutural, Feedz) atualizado"},
                "body": {"storage": {"value": body, "representation": "storage"}}}
     r = requests.put(f"{base}/rest/api/content/{pid}", json=payload, auth=auth, timeout=30); r.raise_for_status()
     return r.json()["version"]["number"]
 
 
 def main():
-    conf, st, ov = _load("config.json"), _load("org_style.json"), _load("org_overrides.json")
-    people = [norm(e) for e in fetch_feedz()]
-    # valida áreas do Feedz contra a taxonomia canônica (taxonomy.json)
-    tax = load_taxonomy(); valid_pilares = {t["area"] for t in tax["times"]}
-    seen = sorted({p["area"] for p in people if p["area"] and p["area"] != "—"})
-    off = [a for a in seen if pilar(a) not in valid_pilares]
-    if off:
-        print("AVISO: áreas do Feedz fora da taxonomia canônica (sem pilar):", off)
-    print("Áreas do Feedz -> pilar:", {a: pilar(a) for a in seen})
-    people, byid, kids, ceo, unit_of = build(people, ov)
-    if not ceo:
-        print("ERRO: não encontrei o CEO/raiz."); return 1
-    png, n = render(people, kids, ceo, unit_of, st, ov)
-    with open("organograma.png", "wb") as f: f.write(png)
-    print(f"Organograma gerado: {n} nós, organograma.png ({len(png)} bytes).")
+    conf = _load("config.json")
+    area_times, time_grupos, time_area = load_taxonomy()
+    source = os.environ.get("ORG_SOURCE", "feedz").lower()
+    if source == "csv":
+        rows = rows_from_csv(os.environ["ORG_CSV"])
+    else:
+        rows = rows_from_feedz(area_times, time_grupos, time_area, conf.get("director_area", {}))
+
+    nodes, kids, ceo, warn, placed, total, missing = build_nodes(rows, area_times, time_grupos)
+    png, n = render(nodes, kids, ceo)
+    with open("organograma.png", "wb") as f:
+        f.write(png)
+    print(f"Fonte: {source}. Pessoas: {placed}/{total}. Nós: {n}. organograma.png ({len(png)} bytes).")
+    if warn:
+        print("AVISOS (colocados no nível válido acima):")
+        for w in warn:
+            print("  -", w)
+    if missing:
+        print("!!! FORA DO ORGANOGRAMA:", missing)
+    else:
+        print("OK: todas as pessoas entraram no organograma.")
+
     if os.environ.get("DRY_RUN", "").lower() in ("1", "true", "yes"):
         print("DRY_RUN: não publiquei. Baixe o artifact organograma.png.")
         return 0

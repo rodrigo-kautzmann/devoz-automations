@@ -6,17 +6,11 @@
     { "time": "Diretoria",        "area": "Diretoria" },
 
     { "time": "Demand Generation","area": "Revenue", "grupos": ["Marketing", "Sales Development"] },
-    { "time": "Sales",            "area": "Revenue", "grupos": ["Brazil", "LATAM", "ROW"] },
+    { "time": "Sales",            "area": "Revenue" },
     { "time": "Customer Care",    "area": "Revenue", "grupos": ["Support", "CS", "Data Manipulation"] },
-
-    { "time": "Internal",         "area": "Innovation" },
-    { "time": "External",         "area": "Innovation" },
 
     { "time": "Product",          "area": "Product & Develop" },
     { "time": "Develop",          "area": "Product & Develop", "grupos": ["Integration", "OZmap", "Platform"] },
-
-    { "time": "Recruiting",       "area": "People" },
-    { "time": "Retention",        "area": "People" },
 
     { "time": "Admin & Finance",  "area": "Business Support" },
     { "time": "Legal",            "area": "Business Support" },
