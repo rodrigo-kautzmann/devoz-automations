@@ -4,7 +4,8 @@
 Modelo (decidido 2026-07-01): DevOZ → Área → Time → Grupo → pessoas.
 - Só unidades com pessoas/responsável viram caixa. Funções/lentes (Recruiting,
   Innovation interna/externa, Sales Brazil/LATAM/ROW) NÃO entram (ver páginas de área).
-- Times e Grupos vêm do taxonomy.json (esqueleto completo; vazios aparecem em cinza).
+- Áreas (ordem/lado do layout), Times e Grupos vêm do taxonomy.json (esqueleto
+  completo; vazios aparecem em cinza). taxonomy.json é a ÚNICA fonte da estrutura.
 - Líder de Área = Diretor; de Time = Gestor; de Grupo = Líder (destacado, sem estrela).
 - REDE DE SEGURANÇA: quem tiver Time/Grupo inválido é colocado no nível válido acima
   e o script AVISA (nunca some ninguém do organograma).
@@ -12,10 +13,10 @@ Modelo (decidido 2026-07-01): DevOZ → Área → Time → Grupo → pessoas.
   People, Business Support e Innovation embaixo (Innovation mais à direita).
 
 Fontes de dados (env ORG_SOURCE):
-- "feedz" (padrão): API do Feedz. Time = departamento; Grupo = 1º group canônico;
-  Área derivada do Time (taxonomy) ou de config director_area p/ diretores;
-  Papel = Líder se a pessoa tem subordinados diretos, senão Liderado.
-  IGNORA remuneração. Requer Feedz LIMPO (ver roteiro-faxina-feedz / Jira IFD).
+- "feedz" (padrão): API do Feedz. **department = Time** (ou a Área, p/ diretor/área-folha;
+  ou "Executive" p/ o CEO). **Grupo vem dos GRUPOS** do colaborador (match case-insensitive
+  contra a taxonomy). **Área é sempre derivada** do Time — nunca lida do Feedz. Papel = Líder
+  se tem subordinados diretos, senão Liderado. IGNORA remuneração.
 - "csv": arquivo pipe "nome|area|time|grupo|papel" em ORG_CSV (uso interino).
 
 Env: FEEDZ_API_TOKEN, CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN, DRY_RUN, ORG_SOURCE, ORG_CSV
@@ -28,9 +29,9 @@ import requests
 HERE = os.path.dirname(os.path.abspath(__file__))
 FEEDZ_EMPLOYEES = "https://app.feedz.com.br/v2/integracao/employees"
 
-# ---- layout congelado ----
-DIRORDER = ["Revenue", "Product & Develop", "People", "Business Support", "Innovation"]
-DIR = {"Revenue": "L", "Product & Develop": "R", "Innovation": "B", "People": "B", "Business Support": "B"}
+# ---- layout: ordem e lado das áreas vêm do taxonomy.json (preenchidos em load_taxonomy) ----
+DIRORDER = []
+DIR = {}
 # cores
 ROOT_BG = "#111111"; PILAR = "#00D256"; MGRC = "#D6F8E4"; GRP = "#EAFBF2"; ICBG = "#FFFFFF"
 BORDER = "#00B84C"; GLEAD = "#00902E"; ICB = "#E2E6E2"; LINE = "#BFC9C0"; INK = "#16231A"
@@ -45,9 +46,12 @@ def _load(name):
 
 def load_taxonomy():
     tx = _load("taxonomy.json")
+    global DIRORDER, DIR
+    DIRORDER = [a["area"] for a in tx["areas"]]
+    DIR = {a["area"]: a["lado"] for a in tx["areas"]}
     area_times = defaultdict(list); time_grupos = {}; time_area = {}
     for t in tx["times"]:
-        if t["area"] == "Diretoria":
+        if t["area"] == "Executive":
             continue
         area_times[t["area"]].append(t["time"])
         time_grupos[t["time"]] = t.get("grupos", [])
@@ -56,7 +60,7 @@ def load_taxonomy():
 
 
 # ---------- fontes de dados -> linhas {name, area, time, grupo, papel} ----------
-def rows_from_feedz(area_times, time_grupos, time_area, director_area):
+def rows_from_feedz(area_times, time_grupos, time_area):
     tok = os.environ["FEEDZ_API_TOKEN"]
     r = requests.get(FEEDZ_EMPLOYEES,
                      headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, timeout=60)
@@ -81,6 +85,9 @@ def rows_from_feedz(area_times, time_grupos, time_area, director_area):
         if m: reports[m] += 1
 
     valid_grupos = set(g for gs in time_grupos.values() for g in gs)
+    TIMES = {t.lower(): t for t in time_area}
+    AREASL = {a.lower(): a for a in DIRORDER}
+    GRUPOS = {g.lower(): (t, g) for t, gs in time_grupos.items() for g in gs}
     rows = []
     for e in emps:
         name = (e.get("full_name") or e.get("name") or "").strip()
@@ -88,20 +95,24 @@ def rows_from_feedz(area_times, time_grupos, time_area, director_area):
         dept = (dig(e, "department_data", "name") or (e.get("department") if isinstance(e.get("department"), str) else "") or "").strip()
         groups = e.get("groups") or []
         gnames = [(g.get("name") if isinstance(g, dict) else str(g)).strip() for g in groups] if isinstance(groups, list) else []
-        # Time / Área
-        if email in director_area:                    # diretores: dept costuma ser "Diretoria"
-            area = director_area[email]; time = ""
-        elif dept in time_area:                        # departamento é um Time canônico
-            time = dept; area = time_area[dept]
-        elif dept in area_times:                       # departamento é uma Área-folha (People/Innovation)
-            area = dept; time = ""
-        else:                                          # desconhecido: deixa a rede de segurança agir
+        # Modelo Feedz: department = Time (ou Área p/ diretor/área-folha, ou Executive); grupos = Grupo.
+        dl = dept.lower()
+        if dl in ("executive", "diretoria"):          # raiz (CEO); "Diretoria" = alias legado
+            area = "Executive"; time = ""
+        elif dl in TIMES:                             # department é um Time -> Área derivada
+            time = TIMES[dl]; area = time_area[time]
+        elif dl in AREASL:                            # department é uma Área (diretor ou área-folha)
+            area = AREASL[dl]; time = ""
+        else:                                         # desconhecido: rede de segurança
             area = dept or "—"; time = dept
-        # Grupo = 1º group que é válido para o Time
-        grupo = next((g for g in gnames if time in time_grupos and g in time_grupos[time]), "")
+        grupo = ""
+        for g in gnames:                              # Grupo canônico válido para o Time
+            gl = g.strip().lower()
+            if time and gl in GRUPOS and GRUPOS[gl][0] == time:
+                grupo = GRUPOS[gl][1]; break
         # Papel: tem subordinados => Líder do seu nível; senão Liderado
         papel = "Líder" if reports.get(email, 0) > 0 else "Liderado"
-        if area == "Diretoria":                        # CEO
+        if area == "Executive":                        # CEO
             papel = "Líder"
         rows.append({"name": name, "area": area, "time": time, "grupo": grupo, "papel": papel})
     return rows
@@ -128,8 +139,8 @@ def build_nodes(rows, area_times, time_grupos):
                       "leader": leader, "papel_leaf": papel_leaf}
         return nid
 
-    ceo = next((p["name"] for p in rows if p["area"] == "Diretoria"), "DevOZ")
-    mk(ceo, "root", "Diretoria", "DevOZ", ceo)
+    ceo = next((p["name"] for p in rows if p["area"] == "Executive"), "DevOZ")
+    mk(ceo, "root", "Executive", "DevOZ", ceo)
 
     def person_node(p, parent, suffix):
         pid = mk(p["name"] + "##" + suffix, "person", p["area"], p["name"], papel_leaf=p["papel"])
@@ -157,12 +168,14 @@ def build_nodes(rows, area_times, time_grupos):
 
     placed = set(leaders)
     for p in rows:
-        if p["name"] in leaders or p["area"] == "Diretoria":
+        if p["name"] in leaders or p["area"] == "Executive":
             continue
         area, time, grupo = p["area"], p["time"], p["grupo"]
         if area not in anode:
             warn.append("%s: área inválida '%s' -> ligado ao DevOZ" % (p["name"], area)); person_node(p, ceo, "root")
         elif not time:
+            if area in area_times:
+                warn.append("%s: sem Time reconhecido em %s (grupo fora do padrão?) -> nível da área" % (p["name"], area))
             person_node(p, anode[area], area)
         elif (area, time) not in tnode:
             warn.append("%s: time inválido '%s' em %s -> nível da área" % (p["name"], time, area)); person_node(p, anode[area], area)
@@ -301,9 +314,8 @@ def confluence_embed(base, auth, pid, fname, conf, n):
     intro = conf.get("org_page_intro_storage", ""); footer = conf.get("org_page_footer_storage", "")
     catalogo = conf.get("catalogo_url", "")
     panel = ('<ac:structured-macro ac:name="info"><ac:rich-text-body><p>'
-             f'<strong>Organograma — atualizado em {today}</strong> ({n} nós), gerado pela automação '
-             f'<code>org-chart</code> (repo devoz-automations). View gerada — não edite à mão. '
-             f'<a href="{catalogo}">Ver catálogo de automações</a>.</p></ac:rich-text-body></ac:structured-macro>')
+             f'<strong>Organograma — atualizado em {today}</strong>, gerado automaticamente. '
+             f'Não edite à mão. <a href="{catalogo}">Ver catálogo de automações</a>.</p></ac:rich-text-body></ac:structured-macro>')
     image = f'<p><ac:image><ri:attachment ri:filename="{fname}" /></ac:image></p>'
     body = intro + panel + image + footer
     g = requests.get(f"{base}/rest/api/content/{pid}", params={"expand": "version"}, auth=auth, timeout=30); g.raise_for_status()
@@ -322,7 +334,7 @@ def main():
     if source == "csv":
         rows = rows_from_csv(os.environ["ORG_CSV"])
     else:
-        rows = rows_from_feedz(area_times, time_grupos, time_area, conf.get("director_area", {}))
+        rows = rows_from_feedz(area_times, time_grupos, time_area)
 
     nodes, kids, ceo, warn, placed, total, missing = build_nodes(rows, area_times, time_grupos)
     png, n = render(nodes, kids, ceo)

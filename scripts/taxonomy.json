@@ -2,8 +2,16 @@
   "_doc": "Taxonomia organizacional CANÔNICA da DevOZ. Níveis: ÁREA (L1) › TIME (L2) › GRUPO (L3). NOMES SEMPRE EM INGLÊS, conforme o organograma oficial. A pessoa pertence a um TIME; GRUPO é o nível fino (opcional); ÁREA é derivada do Time. Feedz = atribuição; taxonomia = conjunto válido + forma.",
   "regra_idioma": "en",
   "niveis": ["Área", "Time", "Grupo"],
+  "areas": [
+    { "area": "Revenue",           "lado": "L" },
+    { "area": "Product & Develop", "lado": "R" },
+    { "area": "People",            "lado": "B" },
+    { "area": "Business Support",  "lado": "B" },
+    { "area": "Innovation",        "lado": "B" }
+  ],
+  "_areas_doc": "Ordem da lista = ordem no organograma; lado: L=esquerda, R=direita, B=embaixo. People e Innovation são áreas-folha (sem Times; pessoas ligadas direto à Área). Executive é a raiz (CEO), não uma Área.",
   "times": [
-    { "time": "Diretoria",        "area": "Diretoria" },
+    { "time": "Executive",        "area": "Executive" },
 
     { "time": "Demand Generation","area": "Revenue", "grupos": ["Marketing", "Sales Development"] },
     { "time": "Sales",            "area": "Revenue" },

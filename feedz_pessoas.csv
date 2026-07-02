@@ -1,0 +1,54 @@
+﻿Nome,E-mail,Cargo,Time (department Feedz),Área (derivada),Grupos (Feedz),Gestor direto,Papel (role),Unidade (branch),Admissão,Status
+Dolores da Costa Martins,dolores.martins@ozmap.com,Supervisor(a) Financeiro,Business Support,Business Support,admin & finance,Daniel Iwata,Gestor,DevOZ LTDA,2025-01-13,Ativo
+Eduardo José León Guerra,eduardo.guerra@ozmap.com,Assistente Administrativo/Financeiro,Business Support,Business Support,admin & finance,Dolores da Costa Martins,Colaborador,DevOZ LTDA,2024-10-01,Ativo
+Gustavo Marcel Guaita,gustavo.guaita@ozmap.com,Assistente Administrativo JR III,Business Support,Business Support,admin & finance,Dolores da Costa Martins,Colaborador,DevOZ LTDA,2020-05-20,Ativo
+Pedro Henrique Dos Santos Silva,pedro.silva@ozmap.com,Analista de TI PL,Business Support,Business Support,it,Dolores da Costa Martins,Colaborador,DevOZ LTDA,2025-11-03,Ativo
+Bruno Vinicius Bedretchuk,bruno.bedretchuk@ozmap.com,Consultor de Desenvolvimento,Product & Develop,Product & Develop,ozmap,Mateus Carlos de Souza,Colaborador,DevOZ LTDA,2025-07-01,Ativo
+Christian Zirke Osta,christian.zirke@ozmap.com,Tech Lead,Product & Develop,Product & Develop,ozmap,Mateus Carlos de Souza,Gestor,DevOZ LTDA,2023-05-02,Ativo
+Douglas Martins dos Santos Góes Matos,douglas.matos@ozmap.com,Designer UX/UI Trainee I,Product & Develop,Product & Develop,product,Everton Andrei Pereira,Colaborador,DevOZ LTDA,2022-06-06,Ativo
+Everton Andrei Pereira,everton.pereira@ozmap.com,Coordenador de Produto,Product & Develop,Product & Develop,product,Mateus Carlos de Souza,Gestor,DevOZ LTDA,2019-07-02,Ativo
+Gabriel Alvares da Silva,gabriel.alvares@ozmap.com,Consultor de Produtos,Product & Develop,Product & Develop,product,Everton Andrei Pereira,Colaborador,DevOZ LTDA,2025-07-21,Ativo
+Gabriel dos Santos Rabelo,gabriel.rabelo@ozmap.com,Consultor de Desenvolvimento,Product & Develop,Product & Develop,ozmap,Mateus Carlos de Souza,Colaborador,DevOZ LTDA,2024-05-02,Ativo
+Iagor Molino Luchesi,iagor.luchesi@ozmap.com,Consultor DevOps,Product & Develop,Product & Develop,platform,Paulo Ricardo Sales Araújo,Colaborador,DevOZ LTDA,2024-07-01,Ativo
+Julio César de Queioz Silveira,julio.silveira@ozmap.com,Consultor de Desenvolvimento,Product & Develop,Product & Develop,ozmap,Mateus Carlos de Souza,Colaborador,DevOZ LTDA,2025-03-18,Ativo
+Jó Sales de Medeiros Júnior,jo.medeiros@ozmap.com,Desenvolvedor PL I,Product & Develop,Product & Develop,integration,Everton Andrei Pereira,Colaborador,DevOZ LTDA,2022-12-07,Ativo
+Leandro Schabarum,leandro.schabarum@ozmap.com,Desenvolvedor SR I,Product & Develop,Product & Develop,ozmap,Mateus Carlos de Souza,Colaborador,DevOZ LTDA,2022-08-17,Ativo
+Leonardo Jardim Ribeiro,leonardo.ribeiro@ozmap.com,Consultor de Desenvolvimento,Product & Develop,Product & Develop,ozmap,Mateus Carlos de Souza,Colaborador,DevOZ LTDA,2025-10-15,Ativo
+Lucas Raphael Potrich Hames,lucas.hames@ozmap.com,Consultor de Desenvolvimento,Product & Develop,Product & Develop,integration,Everton Andrei Pereira,Colaborador,DevOZ LTDA,2026-04-06,Ativo
+Luiz Henrique Ferreira Furtado,luiz.furtado@ozmap.com,Desenvolvedor PL I,Product & Develop,Product & Develop,ozmap,Mateus Carlos de Souza,Colaborador,DevOZ LTDA,2025-10-01,Ativo
+Marcus Vinícius Pires,marcus.pires@ozmap.com,Consultor de Desenvolvimento,Product & Develop,Product & Develop,integration,Everton Andrei Pereira,Colaborador,DevOZ LTDA,2022-05-11,Ativo
+Nestor da Cruz Brasileiro,nestor.brasileiro@ozmap.com,Consultor de Desenvolvimento,Product & Develop,Product & Develop,ozmap,Mateus Carlos de Souza,Colaborador,DevOZ LTDA,2021-09-10,Ativo
+Paulo Ricardo Sales Araújo,paulo.araujo@ozmap.com,Gestor DevOPs,Product & Develop,Product & Develop,platform,Mateus Carlos de Souza,Gestor,DevOZ LTDA,2023-03-06,Ativo
+Pedro Oliveira Gonzaga,pedro.gonzaga@ozmap.com,Desenvolvedor PL I,Product & Develop,Product & Develop,ozmap,Mateus Carlos de Souza,Colaborador,DevOZ LTDA,2023-10-09,Ativo
+Rafael Nadalini Carvalho,rafael.carvalho@ozmap.com,Assistente de Suporte Avançado,Product & Develop,Product & Develop,platform,André Lima dos Santos,Colaborador,DevOZ LTDA,2022-04-11,Ativo
+Andressa Cristiny da Costa Silva,andressa.costa@ozmap.com,Desenvolvedor JR III,Revenue,Revenue,data manipulation,Leonardo Rosa Bittencourt,Colaborador,DevOZ LTDA,2025-10-08,Ativo
+Andressa Mendes da Silva,andressa.silva@ozmap.com,Assistente de Apoio ao Usuário I,Revenue,Revenue,support,André Lima dos Santos,Colaborador,DevOZ LTDA,2024-12-16,Ativo
+André Lima dos Santos,andre.santos@ozmap.com,Supervisor(a) de Atendimento,Revenue,Revenue,support,Leonardo Rosa Bittencourt,Gestor,DevOZ LTDA,2023-10-09,Ativo
+Andy Emerson Tenorio Hinostroza,andy.tenorio@ozmap.com,Consultor de Servicio al Cliente,Revenue,Revenue,customer sucess,Ginna Dariana Duque Moyano,Colaborador,DevOZ LLC,2022-09-12,Ativo
+Axel André Cruz Albornoz,andre.albornoz@ozmap.com,Consultor Comercial,Revenue,Revenue,sales,Carlos Cabreba Alva,Colaborador,DevOZ LLC,2021-08-19,Ativo
+Bruna Hertz dos Santos,bruna.hertz@ozmap.com,Consultor Comercial,Revenue,Revenue,sales,Carlos Cabreba Alva,Colaborador,DevOZ LTDA,2022-08-08,Ativo
+Bruna Silva Teodoro,bruna.teodoro@ozmap.com,Analista de Marketing PL l,Revenue,Revenue,demand generation,Rodrigo Aumondi Kautzmann,Gestor,DevOZ LTDA,2019-08-07,Ativo
+Bruno Santos Nepomuceno Machado,bruno.machado@ozmap.com,Assistente de Marketing,Revenue,Revenue,marketing,Bruna Silva Teodoro,Colaborador,DevOZ LTDA,2025-02-03,Ativo
+Carlos Cabreba Alva,carlos.alva@ozmap.com,Consultor Comercial,Revenue,Revenue,sales,Rodrigo Aumondi Kautzmann,Gestor,DevOZ LLC,2022-04-19,Ativo
+Daniel Candido de Siles Junior,daniel.siles@ozmap.com,Assistente de Suporte Avançado,Revenue,Revenue,support,André Lima dos Santos,Colaborador,DevOZ LTDA,2024-11-11,Ativo
+Edimar Porfiro da Silva,edimar.silva@ozmap.com,Consultor de Atendimento ao Cliente,Revenue,Revenue,customer sucess,Ginna Dariana Duque Moyano,Colaborador,DevOZ LTDA,2023-07-24,Ativo
+Frank Luis Carhuapoma Huamani,frank.huamani@ozmap.com,Consultor de Servicio al Cliente,Revenue,Revenue,customer sucess,Ginna Dariana Duque Moyano,Colaborador,DevOZ LLC,2022-05-23,Ativo
+Gabriel Camilo Marioto,gabriel.marioto@ozmap.com,Consultor de Desenvolvimento,Revenue,Revenue,data manipulation,Leonardo Rosa Bittencourt,Colaborador,DevOZ LTDA,2026-03-02,Ativo
+Ginna Dariana Duque Moyano,ginna.moyano@ozmap.com,Consultor de Servicio al Cliente,Revenue,Revenue,customer sucess,Leonardo Rosa Bittencourt,Gestor,DevOZ LLC,2024-05-22,Ativo
+Joseph Velásques Mamani,joseph.mamani@ozmap.com,Consultor de Servicio al Cliente,Revenue,Revenue,support,André Lima dos Santos,Colaborador,DevOZ LLC,2024-02-21,Ativo
+Leonardo Rosa Bittencourt,leonardo.bittencourt@ozmap.com,Coordenador de Customer Care,Revenue,Revenue,customer care,Rodrigo Aumondi Kautzmann,Gestor,DevOZ LTDA,2021-10-15,Ativo
+Luanne Ribeiro Brum,luanne.brum@ozmap.com,Assistente de Marketing,Revenue,Revenue,marketing,Bruna Silva Teodoro,Colaborador,DevOZ LTDA,2022-04-25,Ativo
+Lucas Mendes Moreira,lucas.moreira@ozmap.com,CUSTOMER SUCCESS MANAGER,Revenue,Revenue,customer sucess,Ginna Dariana Duque Moyano,Colaborador,DevOZ LTDA,2022-08-29,Ativo
+Luis Daniel Acevedo Mendoza,luis.mendoza@ozmap.com,Consultor de Atendimento ao Cliente,Revenue,Revenue,support,André Lima dos Santos,Colaborador,DevOZ LTDA,2026-02-09,Ativo
+Maria Vanessa Morais Teixeira,maria.teixeira@ozmap.com,Assistente de Apoio ao Usuário I,Revenue,Revenue,support,André Lima dos Santos,Colaborador,DevOZ LTDA,2024-12-09,Ativo
+Mariana Valentina Calzadilla de Aguiar,mariana.aguiar@ozmap.com,Consultor de Servicio al Cliente,Revenue,Revenue,support,André Lima dos Santos,Colaborador,DevOZ LLC,2025-11-24,Ativo
+Michele Selau da Costa,michele.selau@ozmap.com,Consultor Comercial,Revenue,Revenue,sales development,Bruna Silva Teodoro,Colaborador,DevOZ LTDA,2021-06-11,Ativo
+Sabrina Arruda,sabrina.arruda@ozmap.com,Analista de CSM JR,Revenue,Revenue,customer sucess,Ginna Dariana Duque Moyano,Colaborador,DevOZ LTDA,2025-03-05,Ativo
+Yuarã Culkyn Mignoni,yuara.mignoni@ozmap.com,Desenvolvedor PL I,Revenue,Revenue,data manipulation,Leonardo Rosa Bittencourt,Colaborador,DevOZ LTDA,2024-06-03,Ativo
+Daniel Iwata,daniel.iwata@ozmap.com,Diretor Financeiro,Diretoria,⚠ fora da taxonomia,,,Gestor,DevOZ LTDA,2025-01-02,Ativo
+Jose Raupp da Rosa Junior,jose.raupp@ozmap.com,CTO,Diretoria,⚠ fora da taxonomia,,,Gestor,DevOZ LTDA,1905-07-04,Ativo
+Mateus Carlos de Souza,mateus.souza@ozmap.com,COO,Diretoria,⚠ fora da taxonomia,,,Administrador,DevOZ LTDA,1905-07-08,Ativo
+Rodrigo Aumondi Kautzmann,rodrigo.kautzmann@ozmap.com,CEO,Diretoria,⚠ fora da taxonomia,,,Administrador,DevOZ LTDA,1905-07-09,Ativo
+Ana Vitoria Silva da Luz Nascimento,ana.nascimento@ozmap.com,Analista de Projetos Júnior,Innovation,⚠ fora da taxonomia,,Jose Raupp da Rosa Junior,Colaborador,DevOZ LTDA,2025-10-08,Ativo
+Natalí dos Santos Souza,natali.souza@ozmap.com,Analista de Recursos Humanos PL I,People,⚠ fora da taxonomia,,Priscila dos Santos Faria,Administrador,DevOZ LTDA,2025-02-03,Ativo
+Priscila dos Santos Faria,priscila.faria@ozmap.com,People Manager,People,⚠ fora da taxonomia,,Rodrigo Aumondi Kautzmann,Administrador,DevOZ LTDA,2026-04-13,Ativo
