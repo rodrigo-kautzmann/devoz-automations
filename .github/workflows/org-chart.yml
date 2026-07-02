@@ -1,10 +1,8 @@
 name: org-chart
 
 on:
-  # Agendamento diário PAUSADO em 2026-07-01 até a limpeza do Feedz (ver IFD no Jira).
-  # Para religar, descomente o bloco schedule abaixo.
-  # schedule:
-  #   - cron: "30 8 * * *"   # 05:30 BRT
+  schedule:
+    - cron: "30 8 * * *"   # 05:30 BRT — diário, a partir do Feedz
   workflow_dispatch:
     inputs:
       dry_run:
