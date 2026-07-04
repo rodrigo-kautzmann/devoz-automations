@@ -1,0 +1,58 @@
+name: audit-amarracao
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"   # 06:00 BRT, toda segunda — auditoria semanal
+  workflow_dispatch:
+    inputs:
+      no_email:
+        description: "Rodar sem enviar e-mail (só gera artifacts)"
+        type: boolean
+        default: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependências
+        run: pip install psycopg2-binary
+      - name: Rodar auditoria de amarração
+        env:
+          # Financeiro (Supabase / cockpit) — Session Pooler, SSL require
+          PGHOST: ${{ secrets.PGHOST }}
+          PGPORT: ${{ secrets.PGPORT }}
+          PGUSER: ${{ secrets.PGUSER }}
+          PGPASSWORD: ${{ secrets.PGPASSWORD }}
+          PGDATABASE: ${{ secrets.PGDATABASE }}
+          # CRM (Zoho OAuth)
+          ZOHO_CLIENT_ID: ${{ secrets.ZOHO_CLIENT_ID }}
+          ZOHO_CLIENT_SECRET: ${{ secrets.ZOHO_CLIENT_SECRET }}
+          ZOHO_REFRESH_TOKEN: ${{ secrets.ZOHO_REFRESH_TOKEN }}
+          ZOHO_ACCOUNTS_URL: ${{ secrets.ZOHO_ACCOUNTS_URL }}
+          ZOHO_API_URL: ${{ secrets.ZOHO_API_URL }}
+          # Monitoramento (Prometheus via proxy do Grafana)
+          GRAFANA_URL: https://monitoz.ozmap.com
+          GRAFANA_DS_UID: cdx3t7vrk9khse
+          GRAFANA_TOKEN: ${{ secrets.GRAFANA_TOKEN }}
+          # Totango (opcional — se ausente, é ignorado)
+          TOTANGO_APP_TOKEN: ${{ secrets.TOTANGO_APP_TOKEN }}
+          TOTANGO_ID_FIELD: ${{ secrets.TOTANGO_ID_FIELD }}
+          # E-mail (alerta)
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_FROM: ${{ secrets.ALERT_FROM }}
+          ALERT_TO: ${{ secrets.ALERT_TO }}
+          AUDIT_LOOKBACK_MONTHS: "3"
+        run: python scripts/audit_amarracao.py ${{ inputs.no_email && '--no-email' || '' }}
+      - name: Publicar relatório como artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auditoria-amarracao
+          path: audit_out/
