@@ -69,9 +69,11 @@ jobs:
             exit 1
           }
 
-      # Persiste a sessão renovada (cookies rotacionados) p/ a próxima execução
+      # Persiste a sessão renovada (cookies rotacionados) p/ a próxima execução.
+      # SÓ em caso de sucesso — cachear uma sessão morta impediria o secret
+      # atualizado de ser usado no run seguinte.
       - name: Salvar sessão renovada (cache)
-        if: always()
+        if: success()
         uses: actions/cache/save@v4
         with:
           path: feedz_state.json
