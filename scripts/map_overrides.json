@@ -1,0 +1,3 @@
+{
+  "_comment": "Exceções do mapa Onde estamos, por e-mail. Uso principal: quem mora fora do Brasil (o campo Residência do Feedz é só BR) ou correção pontual de cidade. Campos por e-mail: cidade (obrigatório), uf, pais, lat, lon. Ex.: \"fulano@ozmap.com\": {\"cidade\": \"Buenos Aires\", \"pais\": \"Argentina\"}. Com lat/lon entra no desenho; sem, use uma cidade que exista em data/cidades_extra.csv."
+}

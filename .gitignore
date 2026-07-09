@@ -1,0 +1,6 @@
+debug/
+onde_estamos.html
+*.xlsx
+__pycache__/
+*.pyc
+audit_out/
