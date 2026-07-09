@@ -1,0 +1,101 @@
+name: onde-estamos
+
+# Fluxo 100% automático do mapa "Onde estamos":
+#   Feedz (export xlsx) → mapa_interativo.py (HTML) → drive_publish.py (Drive)
+#   → Web App do Apps Script serve o HTML → Google Sites embute por URL.
+#
+# Sessão do Feedz: não há login headless (reCAPTCHA). A sessão salva
+# (feedz_state.json) É a credencial. Ela vive no cache do Actions e se renova
+# a cada download; o secret FEEDZ_STATE_JSON é só a semente (e o fallback se o
+# cache evaporar). Se a sessão expirar de vez, o job falha com instrução:
+# rodar `python3 scripts/feedz_export.py login` local e atualizar o secret.
+
+on:
+  schedule:
+    - cron: "20 9 * * *"   # 06:20 BRT — diário
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Só gerar o HTML (artifact), sem publicar no Drive"
+        type: boolean
+        default: false
+
+concurrency:
+  group: onde-estamos
+  cancel-in-progress: false
+
+jobs:
+  mapa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install -r scripts/requirements.txt
+
+      # Sessão do Feedz: tenta o cache (estado mais recente, cookies rotacionados)
+      - name: Restaurar sessão do Feedz (cache)
+        id: state-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: feedz_state.json
+          key: feedz-state-${{ github.run_id }}
+          restore-keys: |
+            feedz-state-
+
+      # Sem cache (1ª vez / cache expirado): semeia a partir do secret
+      - name: Semear sessão a partir do secret
+        if: steps.state-cache.outputs.cache-matched-key == ''
+        env:
+          FEEDZ_STATE_JSON: ${{ secrets.FEEDZ_STATE_JSON }}
+        run: |
+          if [ -z "$FEEDZ_STATE_JSON" ]; then
+            echo "::error::Secret FEEDZ_STATE_JSON não configurado. Rode local: python3 scripts/feedz_export.py login e salve o conteúdo de ~/.config/devoz/feedz_state.json no secret."
+            exit 1
+          fi
+          printf '%s' "$FEEDZ_STATE_JSON" > feedz_state.json
+          chmod 600 feedz_state.json
+
+      - name: Baixar export do Feedz
+        env:
+          FEEDZ_STATE: ${{ github.workspace }}/feedz_state.json
+        run: |
+          python3 scripts/feedz_export.py download -o colaboradores.xlsx || {
+            echo "::error::Sessão do Feedz expirou. Rode local: python3 scripts/feedz_export.py login e atualize o secret FEEDZ_STATE_JSON com o conteúdo de ~/.config/devoz/feedz_state.json."
+            exit 1
+          }
+
+      # Persiste a sessão renovada (cookies rotacionados) p/ a próxima execução
+      - name: Salvar sessão renovada (cache)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: feedz_state.json
+          key: feedz-state-${{ github.run_id }}
+
+      - name: Gerar o HTML do mapa
+        env:
+          MAP_XLSX: colaboradores.xlsx
+        run: python3 scripts/mapa_interativo.py
+
+      - name: Publicar no Drive
+        if: ${{ !inputs.dry_run }}
+        env:
+          GDRIVE_SA_JSON: ${{ secrets.GDRIVE_SA_JSON }}
+          DRIVE_FILE_ID: ${{ secrets.ONDE_ESTAMOS_DRIVE_FILE_ID }}
+        run: python3 scripts/drive_publish.py onde_estamos.html
+
+      # Privacidade: NÃO subir colaboradores.xlsx (tem CPF/banco) nem o HTML
+      # (tem nomes) como artifact em dry-run público? O repo é privado, mas
+      # por padrão só subimos o HTML, nunca o xlsx.
+      - name: Publicar HTML como artifact (conferência)
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: onde-estamos-html
+          path: onde_estamos.html
+          retention-days: 3
