@@ -181,6 +181,11 @@ TEMPLATE = r'''<!DOCTYPE html>
   .leaflet-tooltip.city-tip{white-space:normal !important;width:max-content;max-width:360px;font-size:12.5px;line-height:1.55;padding:9px 12px}
   .leaflet-tooltip.city-tip b{color:var(--green-d)}
   .foot{color:#9AA69C;font-size:11px;margin-top:16px}
+  .genbadge{margin-top:16px;padding-top:12px;border-top:1px solid #eee;color:var(--muted);font-size:12px}
+  details.gen{margin-top:8px;font-size:12px;color:var(--muted)}
+  details.gen summary{cursor:pointer;color:var(--green-d);font-weight:600}
+  details.gen p{margin:6px 0;line-height:1.5}
+  details.gen code{background:#F1FAF4;border-radius:4px;padding:0 4px;font-size:11px}
 </style>
 </head>
 <body>
@@ -200,6 +205,13 @@ TEMPLATE = r'''<!DOCTYPE html>
     <div id="list"></div>
     <div class="pend" id="pendbox"></div>
     <p class="foot">Somente cidade — nunca endereço. Selecione vários times/grupos; o mapa reflete a seleção. Passe o mouse numa bolha pra ver quem mora lá; clique numa pessoa pra centralizar.</p>
+    <div class="genbadge">🤖 <strong>Gerado automaticamente</strong> &middot; Última atualização: __DATA_GER__</div>
+    <details class="gen">
+      <summary>Como este mapa é gerado</summary>
+      <p><strong>Fonte:</strong> Feedz (cidade de residência das pessoas ativas).</p>
+      <p><strong>Quando roda:</strong> automaticamente todo dia às 06:20 (BRT), via GitHub Actions no <code>devoz-automations</code> &middot; <strong>Automação:</strong> <code>scripts/mapa_interativo.py</code> (workflow <code>onde-estamos.yml</code>).</p>
+      <p><strong>Para alterar:</strong> cidade/endereço no Feedz. <strong>Não edite à mão</strong> — a automação sobrescreve.</p>
+    </details>
   </div>
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

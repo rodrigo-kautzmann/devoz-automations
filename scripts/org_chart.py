@@ -320,9 +320,10 @@ def confluence_embed(base, auth, pid, fname, conf, n):
                 '<ac:parameter ac:name="title">Como este organograma é gerado</ac:parameter>'
                 '<ac:rich-text-body>'
                 '<p><strong>Fonte:</strong> <code>taxonomy.json</code> (estrutura) + Feedz (pessoas e líderes).</p>'
-                '<p><strong>Quando roda:</strong> GitHub Actions no <code>devoz-automations</code> '
-                '(workflow <code>org-chart.yml</code>) · <strong>Automação:</strong> '
-                '<code>scripts/org_chart.py</code>.</p>'
+                '<p><strong>Quando roda:</strong> automaticamente todo dia às 05:30 (BRT), '
+                'via GitHub Actions no <code>devoz-automations</code> · '
+                '<strong>Automação:</strong> <code>scripts/org_chart.py</code> '
+                '(workflow <code>org-chart.yml</code>).</p>'
                 '<p><strong>Para alterar:</strong> estrutura via PR no <code>taxonomy.json</code>; '
                 'pessoas e líderes no Feedz. <strong>Não edite à mão</strong> — a automação sobrescreve.</p>'
                 '</ac:rich-text-body></ac:structured-macro>')
