@@ -4,3 +4,5 @@ onde_estamos.html
 __pycache__/
 *.pyc
 audit_out/
+_actions_logs/
+fibex.csv

@@ -312,19 +312,22 @@ def confluence_attach(base, auth, pid, fname, data):
 def confluence_embed(base, auth, pid, fname, conf, n):
     base = base.rstrip("/"); today = datetime.date.today().strftime("%d/%m/%Y")
     intro = conf.get("org_page_intro_storage", ""); footer = conf.get("org_page_footer_storage", "")
-    bastidores = conf.get("bastidores_url", conf.get("catalogo_url", ""))
-    # Padrão DevOZ: metadados de geração num expand COLAPSADO no fim da página (conteúdo primeiro)
-    panel = ('<ac:structured-macro ac:name="expand">'
-             '<ac:parameter ac:name="title">🤖 Organograma gerado automaticamente — como funciona</ac:parameter>'
-             '<ac:rich-text-body>'
-             '<p>Gerado a partir do <code>taxonomy.json</code> (estrutura) e do Feedz (pessoas e líderes). '
-             f'<strong>Não edite à mão</strong> — edições são sobrescritas. Última atualização: {today}.</p>'
-             '<p><strong>Automação:</strong> <code>scripts/org_chart.py</code> no <code>devoz-automations</code> · '
-             '<strong>Para alterar:</strong> estrutura via PR no <code>taxonomy.json</code>; pessoas no Feedz · '
-             f'<a href="{bastidores}">Bastidores completos →</a></p>'
-             '</ac:rich-text-body></ac:structured-macro>')
+    # Padrão DevOZ (intranet): selo VISÍVEL de geração + data da última atualização;
+    # detalhes de COMO é gerado ficam num expand COLAPSADO e autossuficiente (sem página externa).
+    badge = ('<blockquote><p>🤖 <strong>Gerado automaticamente</strong> · '
+             f'Última atualização: {today}</p></blockquote>')
+    detalhes = ('<ac:structured-macro ac:name="expand">'
+                '<ac:parameter ac:name="title">Como este organograma é gerado</ac:parameter>'
+                '<ac:rich-text-body>'
+                '<p><strong>Fonte:</strong> <code>taxonomy.json</code> (estrutura) + Feedz (pessoas e líderes).</p>'
+                '<p><strong>Quando roda:</strong> GitHub Actions no <code>devoz-automations</code> '
+                '(workflow <code>org-chart.yml</code>) · <strong>Automação:</strong> '
+                '<code>scripts/org_chart.py</code>.</p>'
+                '<p><strong>Para alterar:</strong> estrutura via PR no <code>taxonomy.json</code>; '
+                'pessoas e líderes no Feedz. <strong>Não edite à mão</strong> — a automação sobrescreve.</p>'
+                '</ac:rich-text-body></ac:structured-macro>')
     image = f'<p><ac:image><ri:attachment ri:filename="{fname}" /></ac:image></p>'
-    body = intro + image + footer + panel
+    body = intro + image + badge + detalhes + footer
     g = requests.get(f"{base}/rest/api/content/{pid}", params={"expand": "version"}, auth=auth, timeout=30); g.raise_for_status()
     cur = g.json()
     payload = {"id": pid, "type": "page", "title": cur["title"],
