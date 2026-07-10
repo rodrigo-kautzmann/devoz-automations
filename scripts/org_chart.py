@@ -312,10 +312,12 @@ def confluence_attach(base, auth, pid, fname, data):
 def confluence_embed(base, auth, pid, fname, conf, n):
     base = base.rstrip("/"); today = datetime.date.today().strftime("%d/%m/%Y")
     intro = conf.get("org_page_intro_storage", ""); footer = conf.get("org_page_footer_storage", "")
-    catalogo = conf.get("catalogo_url", "")
+    bastidores = conf.get("bastidores_url", conf.get("catalogo_url", ""))
+    # Bloco padrão DevOZ (1 linha): gerado automaticamente + fonte + link "como funciona" (Bastidores)
     panel = ('<ac:structured-macro ac:name="info"><ac:rich-text-body><p>'
-             f'<strong>Organograma — atualizado em {today}</strong>, gerado automaticamente. '
-             f'Não edite à mão. <a href="{catalogo}">Ver catálogo de automações</a>.</p></ac:rich-text-body></ac:structured-macro>')
+             f'🤖 Organograma gerado automaticamente em {today} a partir do <code>taxonomy.json</code> '
+             '(estrutura) e do Feedz (pessoas) — não edite à mão · '
+             f'<a href="{bastidores}">como funciona →</a></p></ac:rich-text-body></ac:structured-macro>')
     image = f'<p><ac:image><ri:attachment ri:filename="{fname}" /></ac:image></p>'
     body = intro + panel + image + footer
     g = requests.get(f"{base}/rest/api/content/{pid}", params={"expand": "version"}, auth=auth, timeout=30); g.raise_for_status()

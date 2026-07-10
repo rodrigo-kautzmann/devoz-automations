@@ -144,7 +144,7 @@ def get_crm():
     out = {}
     offset, page = 0, 200
     while True:
-        q = (f"select ozid, Stage, Deal_Name, domain from Deals "
+        q = (f"select ozid, Stage, Deal_Name, domain, Pipeline from Deals "
              f"where ozid is not null limit {offset},{page}")
         resp = _http_json(f"{api}/crm/v7/coql", data={"select_query": q}, headers=hdr)
         rows = (resp or {}).get("data", [])
@@ -153,10 +153,15 @@ def get_crm():
             if not oz:
                 continue
             stage = (r.get("Stage") or "").strip()
+            pipe = (r.get("Pipeline") or "").strip()
+            sl, is_ozn = stage.lower(), pipe.lower() == "ozneutral"
+            # Regra pipeline-aware: no OZneutral, "Fechado Ganho" = rodando e
+            # "Fechado perdido" = churn. Nos demais (OZmap/Projetos): Rodando/Churn.
+            is_active = sl == "rodando" or (is_ozn and sl == "fechado ganho")
+            is_churn = sl == "churn" or (is_ozn and sl == "fechado perdido")
             out[oz] = {
                 "deal_name": r.get("Deal_Name"), "domain": (r.get("domain") or "").strip(),
-                "stage": stage, "is_active": stage.lower() == "rodando",
-                "is_churn": stage.lower() == "churn",
+                "pipeline": pipe, "stage": stage, "is_active": is_active, "is_churn": is_churn,
             }
         if not (resp or {}).get("info", {}).get("more_records"):
             break
@@ -253,9 +258,11 @@ def reconcile(fin, crm, mon, tot):
         f, c, m = fin.get(oz), crm.get(oz), mon.get(oz)
         nome = (f or {}).get("nome") or (c or {}).get("deal_name") or (m or {}).get("host") or ""
 
-        if not UUID_RE.match(oz):
+        # só reporta ozid malformado quando o registro importa (fatura ou está ativo no CRM);
+        # evita o ruído de deals legados/perdidos com slug no campo ozid.
+        if not UUID_RE.match(oz) and (f or (c and c["is_active"])):
             diverg.append({"ozid": oz, "cliente": nome, "tipo": "ozid_malformado",
-                           "detalhe": "ozid não tem formato UUID"})
+                           "detalhe": f"ozid fora do padrão UUID (stage={(c or {}).get('stage','-')})"})
 
         if f:  # fonte da verdade: fatura
             if not c:

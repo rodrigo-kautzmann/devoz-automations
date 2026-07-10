@@ -2,8 +2,9 @@
   "confluence_base_url": "https://ozmap.atlassian.net/wiki",
   "org_page_id": "2246836238",
   "catalogo_url": "https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2245033997",
+  "bastidores_url": "https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2286911508",
   "org_page_intro_storage": "<p>Estrutura da DevOZ: <strong>DevOZ › Área › Time › Grupo</strong>, com quem lidera cada nível. Não é um cadastro pessoa-a-pessoa — esse virá gerado do Feedz mais pra frente.</p>",
-  "org_page_footer_storage": "<p><strong>Mais detalhe, se precisar:</strong></p><ul><li><p><a href=\"https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2251915265\">Glossário — Área, Time, Grupo e Cargo</a> — o vocabulário oficial e quem cuida do quê em cada nível.</p></li><li><p><a href=\"https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2249162761\">Como gerenciamos dados de pessoas (governança)</a> — onde cada dado mora e quem é a fonte oficial.</p></li></ul>",
+  "org_page_footer_storage": "<p><strong>Mais sobre a organização:</strong></p><ul><li><p><a href=\"https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2286845991\">🏢 Estrutura da empresa</a> — áreas, times e grupos: glossário e lista oficial.</p></li><li><p><a href=\"https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2279276548\">🗺️ Onde estamos</a> — o mapa de onde cada pessoa mora.</p></li><li><p><a href=\"https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2286911508\">⚙️ Bastidores</a> — fontes, geração automática e governança de dados de pessoas.</p></li></ul>",
   "director_area": {
     "rodrigo.kautzmann@ozmap.com": "Executive",
     "daniel.iwata@ozmap.com": "Business Support",
