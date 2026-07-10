@@ -61,11 +61,18 @@ def render_html(tax: dict) -> str:
 
     outros_txt = ", ".join(f"<em>{escape(t['time'])}</em>" for t in outros)
 
-    # Bloco padrão DevOZ (1 linha): gerado automaticamente + fonte + link "como funciona" (Bastidores)
+    # Padrão DevOZ: metadados de geração num expand COLAPSADO no topo (1 linha fechada)
     return (
-        '<ac:structured-macro ac:name="info" ac:schema-version="1"><ac:rich-text-body>'
-        f'<p>🤖 Gerado automaticamente em {agora} a partir do <a href="{TAXONOMY_URL}">taxonomy.json</a> '
-        f'— não edite à mão · <a href="{BASTIDORES_URL}">como funciona →</a></p>'
+        '<ac:structured-macro ac:name="expand">'
+        '<ac:parameter ac:name="title">🤖 Página gerada automaticamente — como funciona</ac:parameter>'
+        "<ac:rich-text-body>"
+        f'<p>Gerada a partir do <a href="{TAXONOMY_URL}">taxonomy.json</a> no '
+        "<code>devoz-automations</code>. <strong>Não edite à mão</strong> — edições são "
+        f"sobrescritas. Última atualização: {agora}.</p>"
+        "<p><strong>Quando roda:</strong> a cada mudança no <code>main</code> · "
+        "<strong>Automação:</strong> <code>scripts/taxonomy_confluence_sync.py</code> · "
+        "<strong>Para alterar:</strong> PR no <code>taxonomy.json</code> · "
+        f'<a href="{BASTIDORES_URL}">Bastidores completos →</a></p>'
         "</ac:rich-text-body></ac:structured-macro>"
         "<p>Nomes de Áreas, Times e Grupos são <strong>sempre em inglês</strong>, conforme o "
         "organograma oficial. A pessoa pertence a um <strong>Time</strong>; o "

@@ -313,13 +313,18 @@ def confluence_embed(base, auth, pid, fname, conf, n):
     base = base.rstrip("/"); today = datetime.date.today().strftime("%d/%m/%Y")
     intro = conf.get("org_page_intro_storage", ""); footer = conf.get("org_page_footer_storage", "")
     bastidores = conf.get("bastidores_url", conf.get("catalogo_url", ""))
-    # Bloco padrão DevOZ (1 linha): gerado automaticamente + fonte + link "como funciona" (Bastidores)
-    panel = ('<ac:structured-macro ac:name="info"><ac:rich-text-body><p>'
-             f'🤖 Organograma gerado automaticamente em {today} a partir do <code>taxonomy.json</code> '
-             '(estrutura) e do Feedz (pessoas) — não edite à mão · '
-             f'<a href="{bastidores}">como funciona →</a></p></ac:rich-text-body></ac:structured-macro>')
+    # Padrão DevOZ: metadados de geração num expand COLAPSADO no fim da página (conteúdo primeiro)
+    panel = ('<ac:structured-macro ac:name="expand">'
+             '<ac:parameter ac:name="title">🤖 Organograma gerado automaticamente — como funciona</ac:parameter>'
+             '<ac:rich-text-body>'
+             '<p>Gerado a partir do <code>taxonomy.json</code> (estrutura) e do Feedz (pessoas e líderes). '
+             f'<strong>Não edite à mão</strong> — edições são sobrescritas. Última atualização: {today}.</p>'
+             '<p><strong>Automação:</strong> <code>scripts/org_chart.py</code> no <code>devoz-automations</code> · '
+             '<strong>Para alterar:</strong> estrutura via PR no <code>taxonomy.json</code>; pessoas no Feedz · '
+             f'<a href="{bastidores}">Bastidores completos →</a></p>'
+             '</ac:rich-text-body></ac:structured-macro>')
     image = f'<p><ac:image><ri:attachment ri:filename="{fname}" /></ac:image></p>'
-    body = intro + panel + image + footer
+    body = intro + image + footer + panel
     g = requests.get(f"{base}/rest/api/content/{pid}", params={"expand": "version"}, auth=auth, timeout=30); g.raise_for_status()
     cur = g.json()
     payload = {"id": pid, "type": "page", "title": cur["title"],
