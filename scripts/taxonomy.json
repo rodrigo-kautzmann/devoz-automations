@@ -21,7 +21,6 @@
     { "time": "Develop",          "area": "Product & Develop", "grupos": ["Integration", "OZmap", "Platform"] },
 
     { "time": "Admin & Finance",  "area": "Business Support" },
-    { "time": "Legal",            "area": "Business Support" },
     { "time": "IT",               "area": "Business Support" }
   ]
 }
