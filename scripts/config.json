@@ -1,6 +1,7 @@
 {
   "confluence_base_url": "https://ozmap.atlassian.net/wiki",
   "org_page_id": "2246836238",
+  "aniversariantes_page_id": "2319482893",
   "org_page_intro_storage": "<p>Estrutura da DevOZ: <strong>DevOZ › Área › Time › Grupo</strong>, com quem lidera cada nível. Não é um cadastro pessoa-a-pessoa — esse virá gerado do Feedz mais pra frente.</p>",
   "org_page_footer_storage": "<p><strong>Mais sobre a organização:</strong></p><ul><li><p><a href=\"https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2286845991\">🏢 Estrutura da empresa</a> — áreas, times e grupos: lista oficial.</p></li><li><p><a href=\"https://ozmap.atlassian.net/wiki/spaces/Intranet1/pages/2279276548\">🗺️ Onde estamos</a> — o mapa de onde cada pessoa mora.</p></li></ul>",
   "director_area": {

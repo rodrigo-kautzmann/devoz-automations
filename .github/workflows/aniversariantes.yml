@@ -1,0 +1,26 @@
+name: aniversariantes
+
+on:
+  schedule:
+    - cron: "30 8 1 * *"   # dia 1 de cada mês, 05:30 BRT — aniversariantes do mês
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Só imprimir a lista/HTML, sem publicar no Confluence"
+        type: boolean
+        default: false
+
+jobs:
+  aniversariantes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Gerar e publicar aniversariantes
+        env:
+          FEEDZ_API_TOKEN: ${{ secrets.FEEDZ_API_TOKEN }}
+          CONFLUENCE_EMAIL: ${{ secrets.CONFLUENCE_EMAIL }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+        run: python scripts/aniversariantes.py ${{ inputs.dry_run && '--dry-run' || '' }}
