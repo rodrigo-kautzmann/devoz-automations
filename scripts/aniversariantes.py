@@ -161,11 +161,10 @@ def collect(emps, month):
         mes, dia = md
         if mes != month:
             continue
-        cargo = (dig(e, "job_description", "title") or "").strip()
         dept = (dig(e, "department_data", "name")
                 or (e.get("department") if isinstance(e.get("department"), str) else "") or "").strip()
         area = t2a.get(dept, dept)
-        people.append((dia, nome, cargo, area))
+        people.append((dia, nome, area))
     people.sort(key=lambda x: (x[0], x[1].lower()))
     return people, sem_data
 
@@ -182,14 +181,13 @@ def render_html(people, month, sem_data_count):
         linhas = "".join(
             f"<tr><td><p><strong>{dia:02d}/{month:02d}</strong></p></td>"
             f"<td><p>🎉 {escape(nome)}</p></td>"
-            f"<td><p>{escape(cargo) or '—'}</p></td>"
             f"<td><p>{escape(area) or '—'}</p></td></tr>"
-            for dia, nome, cargo, area in people)
+            for dia, nome, area in people)
         tabela = (
             '<table data-layout="default"><tbody>'
             '<tr>'
             '<th><p>Dia</p></th><th><p>Quem</p></th>'
-            '<th><p>Cargo</p></th><th><p>Time / Área</p></th>'
+            '<th><p>Time / Área</p></th>'
             '</tr>'
             f'{linhas}</tbody></table>')
         resumo = (f'<p><strong>{len(people)}</strong> '
@@ -285,8 +283,8 @@ def main():
     people, sem_data = collect(emps, month)
     print(f"{MESES[month]}: {len(people)} aniversariante(s); "
           f"{len(sem_data)} sem data de nascimento no Feedz.")
-    for dia, nome, cargo, area in people:
-        print(f"  {dia:02d}/{month:02d}  {nome}  —  {cargo or '?'} ({area or '?'})")
+    for dia, nome, area in people:
+        print(f"  {dia:02d}/{month:02d}  {nome}  —  {area or '?'}")
     if sem_data:
         print("Sem data de nascimento:", ", ".join(sorted(sem_data)) or "—")
 
