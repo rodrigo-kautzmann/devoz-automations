@@ -7,6 +7,10 @@ Modelo (decidido 2026-07-01): DevOZ → Área → Time → Grupo → pessoas.
 - Áreas (ordem/lado do layout), Times e Grupos vêm do taxonomy.json (esqueleto
   completo; vazios aparecem em cinza). taxonomy.json é a ÚNICA fonte da estrutura.
 - Líder de Área = Diretor; de Time = Gestor; de Grupo = Líder (destacado, sem estrela).
+  Prioriza quem tem subordinados diretos no Feedz; se ninguém tiver mas existir
+  exatamente 1 pessoa nesse nível, ela é a líder mesmo assim (protege área/time/
+  grupo com um único responsável que zerou o time — ex.: área-folha) — o script
+  AVISA quando usa esse fallback.
 - REDE DE SEGURANÇA: quem tiver Time/Grupo inválido é colocado no nível válido acima
   e o script AVISA (nunca some ninguém do organograma).
 - Layout congelado: Revenue à esquerda; Product & Develop à direita;
@@ -133,11 +137,29 @@ def rows_from_csv(path):
 # ---------- montagem estrutural + rede de segurança ----------
 def build_nodes(rows, area_times, time_grupos):
     nodes = {}; kids = defaultdict(list)
+    warn = []
 
     def mk(nid, typ, area, label, leader="", papel_leaf=""):
         nodes[nid] = {"name": nid, "type": typ, "area": area, "label": label,
                       "leader": leader, "papel_leaf": papel_leaf}
         return nid
+
+    def pick_leader(candidates, nivel):
+        """Escolhe o líder do nível (Área/Time/Grupo): prioriza quem tem
+        subordinados diretos no Feedz (papel Líder). Se ninguém tiver
+        subordinados mas existir exatamente 1 pessoa nesse nível, ela é a
+        líder mesmo assim — protege área/time/grupo que zerou o time (ex.:
+        área-folha com um único responsável, sem ninguém reportando pra ele
+        no momento). Com 2+ candidatos e nenhum "Líder" no Feedz, não dá pra
+        adivinhar -> nível fica sem líder destacado (comportamento anterior)."""
+        lider = next((p for p in candidates if p["papel"] == "Líder"), None)
+        if lider:
+            return lider
+        if len(candidates) == 1:
+            warn.append("%s: assumido(a) como líder de %s sem subordinados diretos no Feedz"
+                         % (candidates[0]["name"], nivel))
+            return candidates[0]
+        return None
 
     ceo = next((p["name"] for p in rows if p["area"] == "Executive"), "DevOZ")
     mk(ceo, "root", "Executive", "DevOZ", ceo)
@@ -146,22 +168,22 @@ def build_nodes(rows, area_times, time_grupos):
         pid = mk(p["name"] + "##" + suffix, "person", p["area"], p["name"], papel_leaf=p["papel"])
         kids[parent].append(pid)
 
-    warn = []; anode = {}; tnode = {}; gnode = {}; leaders = {ceo}
+    anode = {}; tnode = {}; gnode = {}; leaders = {ceo}
     for area in DIRORDER:
         az = [p for p in rows if p["area"] == area]
-        diretor = next((p for p in az if p["papel"] == "Líder" and not p["time"]), None)
+        diretor = pick_leader([p for p in az if not p["time"]], "Área %s" % area)
         dname = diretor["name"] if diretor else ("Rodrigo Kautzmann" if area == "Revenue" else "")
         if diretor: leaders.add(diretor["name"])
         anid = mk("A::" + area, "area", area, area, dname); kids[ceo].append(anid); anode[area] = anid
         for time in area_times.get(area, []):
             tz = [p for p in az if p["time"] == time]
-            gestor = next((p for p in tz if p["papel"] == "Líder" and not p["grupo"]), None)
+            gestor = pick_leader([p for p in tz if not p["grupo"]], "Time %s/%s" % (area, time))
             if gestor: leaders.add(gestor["name"])
             tnid = mk("T::%s::%s" % (area, time), "time", area, time, gestor["name"] if gestor else "")
             kids[anid].append(tnid); tnode[(area, time)] = tnid
             for grupo in time_grupos.get(time, []):
                 gz = [p for p in tz if p["grupo"] == grupo]
-                glider = next((p for p in gz if p["papel"] == "Líder"), None)
+                glider = pick_leader(gz, "Grupo %s/%s/%s" % (area, time, grupo))
                 if glider: leaders.add(glider["name"])
                 gnid = mk("G::%s::%s::%s" % (area, time, grupo), "grupo", area, grupo, glider["name"] if glider else "")
                 kids[tnid].append(gnid); gnode[(area, time, grupo)] = gnid
@@ -353,7 +375,7 @@ def main():
         f.write(png)
     print(f"Fonte: {source}. Pessoas: {placed}/{total}. Nós: {n}. organograma.png ({len(png)} bytes).")
     if warn:
-        print("AVISOS (colocados no nível válido acima):")
+        print("AVISOS:")
         for w in warn:
             print("  -", w)
     if missing:
