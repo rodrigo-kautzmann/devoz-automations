@@ -2,7 +2,7 @@ name: aniversariantes
 
 on:
   schedule:
-    - cron: "30 8 1 * *"   # dia 1 de cada mês, 05:30 BRT — aniversariantes do mês
+    - cron: "30 8 * * *"   # todo dia, 05:30 BRT — mantém a lista do mês sempre atualizada
   workflow_dispatch:
     inputs:
       dry_run:
