@@ -96,6 +96,7 @@ def rows_from_feedz(area_times, time_grupos, time_area):
     for e in emps:
         name = (e.get("full_name") or e.get("name") or "").strip()
         email = (e.get("email") or "").lower()
+        gestor = (dig(e, "direct_manager", "email") or "").lower()
         dept = (dig(e, "department_data", "name") or (e.get("department") if isinstance(e.get("department"), str) else "") or "").strip()
         groups = e.get("groups") or []
         gnames = [(g.get("name") if isinstance(g, dict) else str(g)).strip() for g in groups] if isinstance(groups, list) else []
@@ -118,19 +119,22 @@ def rows_from_feedz(area_times, time_grupos, time_area):
         papel = "Líder" if reports.get(email, 0) > 0 else "Liderado"
         if area == "Executive":                        # CEO
             papel = "Líder"
-        rows.append({"name": name, "area": area, "time": time, "grupo": grupo, "papel": papel})
+        rows.append({"name": name, "email": email, "gestor": gestor,
+                     "area": area, "time": time, "grupo": grupo, "papel": papel})
     return rows
 
 
 def rows_from_csv(path):
+    """nome|area|time|grupo|papel|email|gestor_email (os 2 últimos são opcionais)."""
     rows = []
     with open(path, encoding="utf-8") as f:
         for ln in f:
             ln = ln.strip()
             if not ln or ln.startswith("#"): continue
-            a = (ln.split("|") + [""] * 5)[:5]
+            a = (ln.split("|") + [""] * 7)[:7]
             rows.append({"name": a[0].strip(), "area": a[1].strip(), "time": a[2].strip(),
-                         "grupo": a[3].strip(), "papel": a[4].strip()})
+                         "grupo": a[3].strip(), "papel": a[4].strip(),
+                         "email": a[5].strip().lower(), "gestor": a[6].strip().lower()})
     return rows
 
 
@@ -138,6 +142,7 @@ def rows_from_csv(path):
 def build_nodes(rows, area_times, time_grupos):
     nodes = {}; kids = defaultdict(list)
     warn = []
+    nome_por_email = {p["email"]: p["name"] for p in rows if p.get("email")}
 
     def mk(nid, typ, area, label, leader="", papel_leaf=""):
         nodes[nid] = {"name": nid, "type": typ, "area": area, "label": label,
@@ -145,21 +150,32 @@ def build_nodes(rows, area_times, time_grupos):
         return nid
 
     def pick_leader(candidates, nivel):
-        """Escolhe o líder do nível (Área/Time/Grupo): prioriza quem tem
-        subordinados diretos no Feedz (papel Líder). Se ninguém tiver
-        subordinados mas existir exatamente 1 pessoa nesse nível, ela é a
-        líder mesmo assim — protege área/time/grupo que zerou o time (ex.:
-        área-folha com um único responsável, sem ninguém reportando pra ele
-        no momento). Com 2+ candidatos e nenhum "Líder" no Feedz, não dá pra
-        adivinhar -> nível fica sem líder destacado (comportamento anterior)."""
+        """Escolhe o líder do nível (Área/Time/Grupo), nesta ordem:
+
+        1. Quem tem subordinados diretos no Feedz (papel Líder) e está no nível.
+        2. LÍDER EXTERNO: se todo mundo do nível reporta à MESMA pessoa e ela não
+           está no nível, ela é a responsável. Cobre o caso de alguém que responde
+           por mais de um Time (ex.: Dolores gere Admin & Finance E IT) — o Feedz
+           só permite 1 department por pessoa, então ela nunca apareceria como
+           gestora do segundo time. Retorna (nome, False) = não "consome" a pessoa.
+        3. Sozinho(a) no nível: assume a liderança e AVISA. Só vale se (2) não
+           resolveu — evita promover um liderado que claramente tem chefe.
+
+        Retorna (nome_do_lider, pertence_ao_nivel) ou (None, False)."""
         lider = next((p for p in candidates if p["papel"] == "Líder"), None)
         if lider:
-            return lider
+            return lider["name"], True
+        if candidates:
+            gestores = {p.get("gestor") for p in candidates}
+            emails = {p.get("email") for p in candidates if p.get("email")}
+            g = next(iter(gestores)) if len(gestores) == 1 else None
+            if g and g not in emails and g in nome_por_email:
+                return nome_por_email[g], False
         if len(candidates) == 1:
             warn.append("%s: assumido(a) como líder de %s sem subordinados diretos no Feedz"
                          % (candidates[0]["name"], nivel))
-            return candidates[0]
-        return None
+            return candidates[0]["name"], True
+        return None, False
 
     ceo = next((p["name"] for p in rows if p["area"] == "Executive"), "DevOZ")
     mk(ceo, "root", "Executive", "DevOZ", ceo)
@@ -171,21 +187,21 @@ def build_nodes(rows, area_times, time_grupos):
     anode = {}; tnode = {}; gnode = {}; leaders = {ceo}
     for area in DIRORDER:
         az = [p for p in rows if p["area"] == area]
-        diretor = pick_leader([p for p in az if not p["time"]], "Área %s" % area)
-        dname = diretor["name"] if diretor else ("Rodrigo Kautzmann" if area == "Revenue" else "")
-        if diretor: leaders.add(diretor["name"])
+        dname, dmeu = pick_leader([p for p in az if not p["time"]], "Área %s" % area)
+        if not dname and area == "Revenue": dname = "Rodrigo Kautzmann"
+        if dname and dmeu: leaders.add(dname)
         anid = mk("A::" + area, "area", area, area, dname); kids[ceo].append(anid); anode[area] = anid
         for time in area_times.get(area, []):
             tz = [p for p in az if p["time"] == time]
-            gestor = pick_leader([p for p in tz if not p["grupo"]], "Time %s/%s" % (area, time))
-            if gestor: leaders.add(gestor["name"])
-            tnid = mk("T::%s::%s" % (area, time), "time", area, time, gestor["name"] if gestor else "")
+            gname, gmeu = pick_leader([p for p in tz if not p["grupo"]], "Time %s/%s" % (area, time))
+            if gname and gmeu: leaders.add(gname)
+            tnid = mk("T::%s::%s" % (area, time), "time", area, time, gname or "")
             kids[anid].append(tnid); tnode[(area, time)] = tnid
             for grupo in time_grupos.get(time, []):
                 gz = [p for p in tz if p["grupo"] == grupo]
-                glider = pick_leader(gz, "Grupo %s/%s/%s" % (area, time, grupo))
-                if glider: leaders.add(glider["name"])
-                gnid = mk("G::%s::%s::%s" % (area, time, grupo), "grupo", area, grupo, glider["name"] if glider else "")
+                glname, glmeu = pick_leader(gz, "Grupo %s/%s/%s" % (area, time, grupo))
+                if glname and glmeu: leaders.add(glname)
+                gnid = mk("G::%s::%s::%s" % (area, time, grupo), "grupo", area, grupo, glname or "")
                 kids[tnid].append(gnid); gnode[(area, time, grupo)] = gnid
 
     placed = set(leaders)
