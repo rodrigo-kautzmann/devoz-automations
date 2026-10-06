@@ -2,7 +2,7 @@ name: org-chart
 
 on:
   schedule:
-    - cron: "30 8 * * *"   # 05:30 BRT — diário, a partir do Feedz
+    - cron: "07 9 * * *"   # 06:07 BRT — diário, a partir do Feedz (minuto quebrado: menos fila no GitHub)
   workflow_dispatch:
     inputs:
       dry_run:

@@ -27,6 +27,15 @@ COL = {"nome": "Nome completo", "nome2": "Nome", "email": "Email",
 ALIAS_CIDADE = {("distrito federal", "DF"): ("Brasília", "DF")}
 PAISES_BR = ("brasil", "brazil", "br", "")
 
+# Debug: rode com MAP_DEBUG=1 (ou passe --debug) pra ver, pessoa a pessoa, o que o
+# script leu do Feedz e como resolveu (cidade/país/coordenada). Vai tudo pro stderr.
+DEBUG = bool(os.environ.get("MAP_DEBUG") or "--debug" in sys.argv)
+
+
+def dbg(*a):
+    if DEBUG:
+        print("[debug]", *a, file=sys.stderr)
+
 
 def norm(s):
     s = unicodedata.normalize("NFKD", (s or "").strip().lower())
@@ -84,9 +93,13 @@ def read_xlsx(path):
         return h.index(n)
 
     I = {k: idx(k) for k in COL}
+    dbg("colunas do export (cabecalho):", h)
+    dbg("indices usados:", {COL[k]: I[k] for k in COL})
+    n_deslig = 0
     pessoas = []
     for r in rows:
         if (r[I["deslig"]] and str(r[I["deslig"]]).strip()) or (r[I["ultdia"]] and str(r[I["ultdia"]]).strip()):
+            n_deslig += 1
             continue  # desligado
         nome = str(r[I["nome"]] or r[I["nome2"]] or "").strip()
         email = str(r[I["email"]] or "").strip().lower()
@@ -96,6 +109,7 @@ def read_xlsx(path):
                         "cidade": str(r[I["cid"]] or "").strip(), "uf": str(r[I["uf"]] or "").strip().upper(),
                         "endereco": str(r[I["end"]] or "").strip(),
                         "time": str(r[I["dep"]] or "").strip(), "grupo": clean_grupo(r[I["grupos"]])})
+    dbg(f"lidos {len(pessoas)} ativos, {n_deslig} desligados ignorados")
     return pessoas
 
 
@@ -106,30 +120,50 @@ def build(pessoas):
     except FileNotFoundError:
         overrides = {}
     grouped, pend, warn = {}, [], []
+    if DEBUG:
+        dbg(f"coords: {len(coords_br)} cidades BR, {len(coords_extra)} fora do BR; "
+            f"{len(overrides) - (1 if isinstance(overrides, dict) and '_comment' in overrides else 0)} override(s)")
     for p in pessoas:
         ov = overrides.get(p["email"], {}) if isinstance(overrides, dict) else {}
         cid = (ov.get("cidade") or p["cidade"]).strip(); uf = (ov.get("uf") or p["uf"]).strip().upper()
         pais = (ov.get("pais") or "").strip()
+        origem = "override" if ov else ("municipio" if p["cidade"] else "")
+        dbg(f"{p['nome']} <{p['email']}>: Municipio={p['cidade']!r} UF={p['uf']!r} "
+            f"Endereco={p['endereco']!r}" + (f" override={ov}" if ov else ""))
         if not cid and p["endereco"]:
             cp = cidade_pais_do_endereco(p["endereco"])
             if cp:
-                cid, pais = cp; uf = ""
+                cid, pais = cp; uf = ""; origem = "endereco"
+                dbg(f"  -> parse do Endereco: cidade={cid!r} pais={pais!r}")
+            else:
+                dbg(f"  -> Endereco nao termina em '..., Cidade, Pais' (ultima parte tem numero?) — nao parseou")
         if not cid:
+            dbg("  -> SEM CIDADE: cai em pendente (Municipio vazio e Endereco nao parseavel)")
             pend.append(p["nome"]); continue
-        if norm(pais) in PAISES_BR:
+        eh_br = norm(pais) in PAISES_BR
+        if eh_br:
+            if origem == "municipio" and not p["uf"]:
+                dbg("  ! Municipio preenchido mas SEM pais/UF -> tratado como BR. Se a pessoa mora "
+                    "fora, isso esta ERRADO: limpe o Municipio e use o campo Endereco '..., Cidade, Pais'")
             if (norm(cid), uf) in ALIAS_CIDADE:
                 cid, uf = ALIAS_CIDADE[(norm(cid), uf)]
             label = f"{cid}/{uf}" if uf else cid
             lat, lon = coords_br.get((norm(cid), uf), (None, None))
+            dbg(f"  -> rota BR: chave=({norm(cid)!r},{uf!r}) coord={'ok' if lat is not None else 'NAO ACHOU'}")
         else:
             label = f"{cid}/{pais}"
             lat, lon = coords_extra.get((norm(cid), norm(pais)), (None, None))
+            dbg(f"  -> rota FORA: chave=({norm(cid)!r},{norm(pais)!r}) em cidades_extra.csv -> "
+                f"{'ok' if lat is not None else 'NAO ACHOU (falta linha nesse CSV)'}")
         if "lat" in ov and "lon" in ov:
             lat, lon = float(ov["lat"]), float(ov["lon"])
+            dbg(f"  -> lat/lon vieram do override: {lat},{lon}")
         if lat is None:
             warn.append(f"sem coordenada p/ {label} ({p['email']}) — adicione em data/cidades_extra.csv")
             pend.append(p["nome"] + f" (cidade {label} sem coordenada)")
+            dbg(f"  -> PENDENTE: sem coordenada p/ {label}")
             continue
+        dbg(f"  -> OK: {label} @ ({lat},{lon})")
         g = grouped.setdefault(label, {"lat": lat, "lon": lon, "cidade": cid,
                                        "suf": uf or (pais if norm(pais) not in PAISES_BR else ""), "pessoas": []})
         g["pessoas"].append({"nome": p["nome"], "time": p["time"], "grupo": p["grupo"]})

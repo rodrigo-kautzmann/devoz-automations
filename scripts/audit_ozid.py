@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-Auditoria de amarração de clientes entre sistemas — DevOZ.
+Auditoria de ozid — consistência da chave canônica entre os sistemas da DevOZ.
 
 Cruza, pela chave canônica `ozid` (UUID), quatro fontes:
   1. FINANCEIRO  (Supabase / cockpit)  -> fonte da verdade ("quem fatura")
   2. CRM         (Zoho, deals c/ ozid)
-  3. MONITORAMENTO (Prometheus via proxy do Grafana; label userID = ozid)
-  4. TOTANGO     (API Search v2)  -> módulo configurável (ver TOTANGO_* / --probe)
+  3. TOTANGO     (Search API v1; ozid no atributo "Identifier" — ver TOTANGO_* / --probe)
+
+FORA DE ESCOPO por decisão (2026-08-24): Manager/OZmachine e Monitoramento (Prometheus via
+Grafana). Ambos só respondem dentro da rede — exigiriam VPN, que o GitHub Actions não tem.
+Consequência aceita: a fonte da verdade continua sendo o FINANCEIRO ("quem fatura"), não o
+Manager ("quem existe"), e a auditoria não verifica mais se o cliente está de pé.
 
 Detecta:
-  - GAPS DE PRESENÇA: fatura mas falta em CRM/Totango/monitoramento (e o reverso).
-  - IDs DIVERGENTES: host(monitor) != domain(CRM) p/ o mesmo ozid; ozid malformado;
-    conta Totango sem ozid correspondente.
+  - GAPS DE PRESENÇA: fatura mas falta em CRM/Totango (e o reverso).
+  - IDs DIVERGENTES: ozid malformado; conta Totango sem ozid correspondente.
 
 Saída: CSVs por categoria + resumo (markdown) em OUT_DIR. Se houver inconsistências
 e SMTP_* estiver configurado, dispara e-mail com o resumo.
@@ -22,16 +25,17 @@ Variáveis de ambiente
   Financeiro (Postgres/Supabase):  PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE  (SSL require)
   Zoho:      ZOHO_CLIENT_ID ZOHO_CLIENT_SECRET ZOHO_REFRESH_TOKEN
              [ZOHO_ACCOUNTS_URL=https://accounts.zoho.com] [ZOHO_API_URL=https://www.zohoapis.com]
-  Grafana:   GRAFANA_URL GRAFANA_TOKEN GRAFANA_DS_UID
-  Totango:   TOTANGO_APP_TOKEN [TOTANGO_BASE=https://api.totango.com]
-             [TOTANGO_ID_FIELD=account_id]  (campo do Totango que guarda o ozid; ou 'domain')
+  Totango:   TOTANGO_APP_TOKEN  (token da Search API, formato "{v2}<uuid>" — NÃO o token
+                                 do int-hub usado para escrita) [TOTANGO_BASE=https://api.totango.com]
+             [TOTANGO_ID_FIELD=identifier]  (alias do campo que guarda o ozid;
+                                 opções: identifier | identificador | company_domain)
   E-mail:    SMTP_HOST SMTP_PORT SMTP_USER SMTP_PASSWORD ALERT_FROM ALERT_TO
   Ajustes:   AUDIT_LOOKBACK_MONTHS=3   OUT_DIR=audit_out
 
 Uso:
-  python3 scripts/audit_amarracao.py            # roda auditoria completa
-  python3 scripts/audit_amarracao.py --probe-totango   # só dumpa amostra do Totango
-  python3 scripts/audit_amarracao.py --no-email        # não envia e-mail
+  python3 scripts/audit_ozid.py            # roda auditoria completa
+  python3 scripts/audit_ozid.py --probe-totango   # só dumpa amostra do Totango
+  python3 scripts/audit_ozid.py --no-email        # não envia e-mail
 """
 import argparse
 import csv
@@ -44,15 +48,6 @@ import urllib.parse
 import urllib.request
 
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
-
-# reaproveita a classificação de host (produção vs teste/demo/interno) do ozmap_metrics.py
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-try:
-    from ozmap_metrics import classify_host
-except Exception:
-    def classify_host(h):
-        return (True, "")
-
 
 def env(name, default=None, required=False):
     v = os.environ.get(name, default)
@@ -171,92 +166,111 @@ def get_crm():
 
 
 # ----------------------------------------------------------------------------
-# 3. MONITORAMENTO — Prometheus via proxy do Grafana (label userID = ozid)
+# 3. TOTANGO — Search API v1
 # ----------------------------------------------------------------------------
-def get_monitoramento():
-    base = env("GRAFANA_URL", required=True).rstrip("/")
-    uid = env("GRAFANA_DS_UID", required=True)
-    token = env("GRAFANA_TOKEN", required=True)
-    url = (f"{base}/api/datasources/uid/{uid}/resources/api/v1/query"
-           f"?query={urllib.parse.quote('hc_numUsers')}")
-    resp = _http_json(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"})
-    out = {}
-    for s in resp.get("data", {}).get("result", []):
-        m = s.get("metric", {})
-        oz = (m.get("userID") or "").strip().lower()
-        host = m.get("host", "")
-        if not oz:
-            continue
-        is_prod, _cat = classify_host(host)
-        if not is_prod:
-            continue  # ignora demo/teste/interno DevOZ
-        out[oz] = {"host": host}
-    return out
+# Onde vive o ozid no Totango (confirmado contra a API + subflow "Totango | createAccount"):
+#   - atributo string "Identifier"    = ozid   <- chave canônica
+#   - atributo string "Identificador" = ozid   (duplicata legada, mesmo valor)
+#   - account id (hits[].name)        = ozid SÓ nas contas novas; nas legadas é slug
+#                                      ("wayiranet", "giganet"), então NÃO serve de chave
+#   - atributo "Company Domain"       = URL completa (https://<slug>.ozmap.com.br),
+#                                      enquanto CRM.domain é só o slug -> normalizar
+# A Search API é /api/v1/ (v2 não existe: 404) e devolve os campos pedidos
+# posicionalmente em hits[].selected_fields, na ordem de "fields" — NÃO em display_fields.
+TOTANGO_FIELDS = [
+    ("Identifier", "identifier"),
+    ("Identificador", "identificador"),
+    ("Company Domain", "company_domain"),
+    ("Status", "status"),
+]
 
 
-# ----------------------------------------------------------------------------
-# 4. TOTANGO — API Search v2 (módulo configurável)
-# ----------------------------------------------------------------------------
+def _totango_norm_domain(v):
+    """'https://silcomnet.ozmap.com.br/' -> 'silcomnet' (formato do CRM.domain)."""
+    if not v:
+        return ""
+    v = str(v).strip().lower().rstrip("/")
+    v = re.sub(r"^https?://", "", v)
+    return v.split(".")[0]
+
+
 def _totango_fetch_accounts():
     base = env("TOTANGO_BASE", "https://api.totango.com").rstrip("/")
     token = env("TOTANGO_APP_TOKEN", required=True)
-    # Search API: paginação por offset; retorna display_name + campos.
     accounts, offset, page = [], 0, 1000
     while True:
-        query = {"terms": [], "count": page, "offset": offset,
-                 "fields": [{"type": "string_attribute", "attribute": "domain", "field_display_name": "domain"}],
-                 "scope": "all"}
+        query = {"terms": [], "count": page, "offset": offset, "scope": "all",
+                 "fields": [{"type": "string_attribute", "attribute": a,
+                             "field_display_name": d} for a, d in TOTANGO_FIELDS]}
         data = urllib.parse.urlencode({"query": json.dumps(query)}).encode()
-        resp = _http_json(f"{base}/api/v2/search/accounts", data=data,
+        resp = _http_json(f"{base}/api/v1/search/accounts", data=data,
                           headers={"app-token": token,
                                    "Content-Type": "application/x-www-form-urlencoded"})
-        hits = (((resp or {}).get("response") or {}).get("accounts") or {}).get("hits", [])
-        if not hits:
+        block = (((resp or {}).get("response") or {}).get("accounts") or {})
+        hits = block.get("hits", [])
+        total = block.get("total_hits", 0)
+        for h in hits:
+            sel = h.get("selected_fields") or []
+            rec = {"raw_id": h.get("name"),
+                   "display_name": h.get("display_name") or h.get("name")}
+            for i, (_attr, alias) in enumerate(TOTANGO_FIELDS):
+                rec[alias] = sel[i] if i < len(sel) else None
+            accounts.append(rec)
+        offset += len(hits)
+        if not hits or offset >= total:
             break
-        accounts.extend(hits)
-        if len(hits) < page:
-            break
-        offset += page
     return accounts
 
 
 def get_totango():
-    """Retorna dict ozid_ou_domain -> {name, raw_id}. O campo identificador é
-    configurável via TOTANGO_ID_FIELD (default 'account_id'). Em Totango, o id da
-    conta costuma vir em hit['name']; atributos extras em hit['display_fields']."""
-    id_field = env("TOTANGO_ID_FIELD", "account_id")
+    """Retorna dict chave -> {name, raw_id, domain}, onde a chave é o ozid.
+
+    Ordem de preferência da chave (TOTANGO_ID_FIELD sobrescreve a primeira):
+      1. atributo "Identifier"        (o ozid de verdade)
+      2. atributo "Identificador"     (duplicata legada)
+      3. account id, se for UUID      (contas novas: id == ozid)
+      4. domain normalizado           (último recurso, casa com CRM.domain)
+    """
+    id_field = (env("TOTANGO_ID_FIELD", "identifier") or "identifier").strip().lower()
     out = {}
-    for h in _totango_fetch_accounts():
-        raw_id = h.get("name")  # account_id do Totango
-        disp = h.get("display_name") or raw_id
-        df = h.get("display_fields", {}) or {}
-        # chave de match: tenta o campo configurado, senão o próprio account_id, senão domain
-        key = df.get(id_field) or raw_id or df.get("domain")
+    for r in _totango_fetch_accounts():
+        raw_id = (r.get("raw_id") or "").strip()
+        cand = [r.get(id_field), r.get("identifier"), r.get("identificador")]
+        key = next((str(c).strip() for c in cand if c and str(c).strip()), "")
+        if not key and UUID_RE.match(raw_id):
+            key = raw_id
+        dom = _totango_norm_domain(r.get("company_domain"))
+        if not key:
+            key = dom
         if not key:
             continue
-        out[str(key).strip().lower()] = {"name": disp, "raw_id": raw_id,
-                                         "domain": (df.get("domain") or "").strip().lower()}
+        out[key.lower()] = {"name": r.get("display_name") or raw_id,
+                            "raw_id": raw_id, "domain": dom,
+                            "status": (r.get("status") or "")}
     return out
 
 
 def probe_totango():
     accts = _totango_fetch_accounts()
-    print(f"# Totango: {len(accts)} contas. Amostra (pra confirmar qual campo é o ozid):")
-    for h in accts[:8]:
-        print(json.dumps({"name": h.get("name"), "display_name": h.get("display_name"),
-                          "display_fields": h.get("display_fields")}, ensure_ascii=False))
+    ident = sum(1 for a in accts if a.get("identifier"))
+    id_uuid = sum(1 for a in accts if UUID_RE.match((a.get("raw_id") or "")))
+    print(f"# Totango: {len(accts)} contas | com atributo Identifier: {ident} "
+          f"| account id em formato UUID: {id_uuid}")
+    print("# (Identifier é a chave; account id só é ozid nas contas novas.)")
+    for a in accts[:8]:
+        print(json.dumps(a, ensure_ascii=False))
 
 
 # ----------------------------------------------------------------------------
 # Reconciliação
 # ----------------------------------------------------------------------------
-def reconcile(fin, crm, mon, tot):
+def reconcile(fin, crm, tot):
     gaps, diverg = [], []
-    all_ozids = set(fin) | set(crm) | set(mon) | set(tot)
+    all_ozids = set(fin) | set(crm) | set(tot)
 
     for oz in sorted(all_ozids):
-        f, c, m = fin.get(oz), crm.get(oz), mon.get(oz)
-        nome = (f or {}).get("nome") or (c or {}).get("deal_name") or (m or {}).get("host") or ""
+        f, c = fin.get(oz), crm.get(oz)
+        nome = (f or {}).get("nome") or (c or {}).get("deal_name") or ""
 
         # só reporta ozid malformado quando o registro importa (fatura ou está ativo no CRM);
         # evita o ruído de deals legados/perdidos com slug no campo ozid.
@@ -271,9 +285,6 @@ def reconcile(fin, crm, mon, tot):
             elif not c["is_active"]:
                 gaps.append({"ozid": oz, "cliente": nome, "gap": "fatura_CRM_nao_rodando",
                              "detalhe": f"stage={c['stage']}"})
-            if not m:
-                gaps.append({"ozid": oz, "cliente": nome, "gap": "fatura_sem_monitoramento",
-                             "detalhe": f"{f['empresa']}"})
             if tot and oz not in tot and (c or {}).get("domain", "") not in tot:
                 gaps.append({"ozid": oz, "cliente": nome, "gap": "fatura_sem_Totango",
                              "detalhe": ""})
@@ -281,25 +292,17 @@ def reconcile(fin, crm, mon, tot):
             if c and c["is_active"]:
                 gaps.append({"ozid": oz, "cliente": nome, "gap": "CRM_rodando_sem_faturar",
                              "detalhe": "ativo no CRM mas sem faturamento recente"})
-            if m and not (c and c["is_churn"]):
-                gaps.append({"ozid": oz, "cliente": nome, "gap": "monitorado_sem_faturar",
-                             "detalhe": f"host={m['host']}"})
-
-        # divergência host x domain
-        if c and m and c["domain"] and m["host"] and c["domain"] != m["host"]:
-            diverg.append({"ozid": oz, "cliente": nome, "tipo": "host_x_domain",
-                           "detalhe": f"CRM.domain={c['domain']} != monitor.host={m['host']}"})
 
     # contas Totango sem ozid correspondente
     for key, t in (tot or {}).items():
-        if key not in fin and key not in crm and key not in mon:
-            diverg.append({"ozid": key, "cliente": t["name"], "tipo": "totango_sem_amarracao",
+        if key not in fin and key not in crm:
+            diverg.append({"ozid": key, "cliente": t["name"], "tipo": "totango_sem_ozid",
                            "detalhe": "conta no Totango não bate com ozid/domain de nenhum sistema"})
 
     return gaps, diverg
 
 
-def write_report(out_dir, fin, crm, mon, tot, gaps, diverg, sources_ok):
+def write_report(out_dir, fin, crm, tot, gaps, diverg, sources_ok):
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "gaps.csv"), "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["ozid", "cliente", "gap", "detalhe"])
@@ -311,9 +314,9 @@ def write_report(out_dir, fin, crm, mon, tot, gaps, diverg, sources_ok):
     import collections
     g = collections.Counter(x["gap"] for x in gaps)
     d = collections.Counter(x["tipo"] for x in diverg)
-    lines = [f"# Auditoria de amarração — {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}", ""]
+    lines = [f"# Auditoria de ozid — {time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime())}", ""]
     lines.append(f"Fontes lidas: financeiro={len(fin)} | CRM={len(crm)} | "
-                 f"monitoramento={len(mon)} | Totango={len(tot)}")
+                 f"Totango={len(tot)}")
     falhas = [s for s, ok in sources_ok.items() if not ok]
     if falhas:
         lines.append(f"⚠️ Fontes que FALHARAM (ignoradas): {', '.join(falhas)}")
@@ -336,7 +339,7 @@ def send_email(summary, out_dir):
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
     msg = MIMEMultipart()
-    msg["Subject"] = "[DevOZ] Auditoria de amarração — inconsistências encontradas"
+    msg["Subject"] = "[DevOZ] Auditoria de ozid — inconsistências encontradas"
     msg["From"] = env("ALERT_FROM", env("SMTP_USER"))
     msg["To"] = to
     msg.attach(MIMEText(summary, "plain", "utf-8"))
@@ -374,7 +377,7 @@ def safe(fn, name, sources_ok):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Auditoria de amarração de clientes DevOZ.")
+    ap = argparse.ArgumentParser(description="Auditoria de ozid: consistência da chave canônica entre os sistemas da DevOZ.")
     ap.add_argument("--probe-totango", action="store_true", help="só dumpa amostra do Totango")
     ap.add_argument("--no-email", action="store_true", help="não envia e-mail")
     ap.add_argument("--out", default=env("OUT_DIR", "audit_out"))
@@ -389,14 +392,18 @@ def main():
     print("Lendo fontes...", file=sys.stderr)
     fin = safe(lambda: get_financeiro(lookback), "financeiro", sources_ok)
     crm = safe(get_crm, "CRM", sources_ok)
-    mon = safe(get_monitoramento, "monitoramento", sources_ok)
-    tot = safe(get_totango, "Totango", sources_ok) if env("TOTANGO_APP_TOKEN") else {}
+    if env("TOTANGO_APP_TOKEN"):
+        tot = safe(get_totango, "Totango", sources_ok)
+    else:
+        tot = {}
+        sources_ok["Totango"] = False
+        print("  Totango: FALHOU -> TOTANGO_APP_TOKEN ausente", file=sys.stderr)
 
     if not sources_ok.get("financeiro"):
         sys.exit("ERRO: financeiro (fonte da verdade) falhou — abortando auditoria.")
 
-    gaps, diverg = reconcile(fin, crm, mon, tot)
-    summary = write_report(args.out, fin, crm, mon, tot, gaps, diverg, sources_ok)
+    gaps, diverg = reconcile(fin, crm, tot)
+    summary = write_report(args.out, fin, crm, tot, gaps, diverg, sources_ok)
     print("\n" + summary)
 
     if (gaps or diverg) and not args.no_email:
