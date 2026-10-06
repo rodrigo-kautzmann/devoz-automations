@@ -18,7 +18,7 @@ Uso:
 
 Estado da sessão: ~/.config/devoz/feedz_state.json (chmod 600; fora de repo).
 Override via env FEEDZ_STATE. Sem segredos no ambiente — a sessão É a credencial.
-Requer: playwright (pip install playwright && python -m playwright install chromium).
+Requer: playwright (pip install playwright) e, para o login, o Google Chrome instalado.
 O modo `download` não abre navegador (usa o cliente HTTP do Playwright).
 """
 import argparse
@@ -31,7 +31,6 @@ EXPORT_URL = f"{BASE}/empresa/colaboradores/exportar"
 CHECK_URL = f"{BASE}/empresa/relatorios"
 STATE_PATH = os.environ.get(
     "FEEDZ_STATE", os.path.expanduser("~/.config/devoz/feedz_state.json"))
-LOGIN_WAIT_S = 300  # tempo máximo p/ você completar o login manual
 XLSX_MAGIC = b"PK\x03\x04"  # xlsx é um zip
 
 
@@ -50,26 +49,46 @@ def _logged_in(request_ctx):
         return False
 
 
+CHROME_PATH = os.environ.get(
+    "CHROME_PATH", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+CHROME_PROFILE = os.path.expanduser("~/.config/devoz/feedz_chrome_profile")
+CDP_PORT = 9333
+
+
 def do_login():
-    """Abre um Chromium COM interface; você loga (captcha/2FA e tudo); salva a sessão."""
+    """Abre o SEU Google Chrome (perfil dedicado, sem automação); você loga; salva a sessão.
+
+    Por que não `p.chromium.launch()`: navegador lançado pelo Playwright carrega
+    marcas de automação e o Cloudflare Turnstile do Feedz reprova (erro 600010)
+    mesmo com humano digitando. Aqui o Chrome sobe como processo comum; o
+    Playwright só se conecta (CDP) DEPOIS que você passou do captcha, para ler
+    os cookies. Perfil dedicado porque o Chrome recusa porta de debug no perfil
+    padrão — e ele persiste, então no próximo login talvez nem peça senha.
+    """
+    import subprocess
     from playwright.sync_api import sync_playwright
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        ctx = browser.new_context()
-        page = ctx.new_page()
-        page.goto(BASE, wait_until="domcontentloaded")
-        print("[login] Faça o login normalmente na janela que abriu "
-              "(captcha/2FA inclusos). Eu detecto sozinho quando entrar.")
-        for waited in range(0, LOGIN_WAIT_S, 3):
-            page.wait_for_timeout(3000)
-            if _logged_in(ctx.request):
-                _save_state(ctx)
-                print(f"[login] OK — sessão salva em {STATE_PATH}")
-                browser.close()
-                return
-        browser.close()
-        raise SystemExit(f"[login] Não detectei login em {LOGIN_WAIT_S}s. Tente de novo.")
+    if not os.path.exists(CHROME_PATH):
+        raise SystemExit(f"Chrome não encontrado em {CHROME_PATH} (defina CHROME_PATH).")
+    os.makedirs(CHROME_PROFILE, exist_ok=True)
+    proc = subprocess.Popen(
+        [CHROME_PATH, f"--remote-debugging-port={CDP_PORT}",
+         f"--user-data-dir={CHROME_PROFILE}", "--no-first-run",
+         "--no-default-browser-check", BASE],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        input("[login] Faça o login na janela do Chrome que abriu (captcha/2FA).\n"
+              "        Quando estiver DENTRO do Feedz, volte aqui e aperte Enter... ")
+        with sync_playwright() as p:
+            browser = p.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
+            ctx = browser.contexts[0]
+            if not _logged_in(ctx.request):
+                raise SystemExit("[login] Não estou vendo sessão logada no Feedz. "
+                                 "Termine o login e rode de novo.")
+            _save_state(ctx)
+            print(f"[login] OK — sessão salva em {STATE_PATH}")
+    finally:
+        proc.terminate()
 
 
 def fetch_colaboradores_xlsx():

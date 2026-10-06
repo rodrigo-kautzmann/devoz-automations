@@ -7,7 +7,7 @@ name: onde-estamos
 # Sessão do Feedz: não há login headless (reCAPTCHA). A sessão salva
 # (feedz_state.json) É a credencial. Ela vive no cache do Actions e se renova
 # a cada download; o secret FEEDZ_STATE_JSON é só a semente (e o fallback se o
-# cache evaporar). Se a sessão expirar de vez, o job falha com instrução:
+# cache evaporar ou a sessão dele morrer). Se as duas morrerem, o job falha com instrução:
 # rodar `python3 scripts/feedz_export.py login` local e atualizar o secret.
 
 on:
@@ -60,14 +60,22 @@ jobs:
           printf '%s' "$FEEDZ_STATE_JSON" > feedz_state.json
           chmod 600 feedz_state.json
 
+      # Se a sessão do cache morreu, tenta a do secret antes de desistir — assim
+      # basta atualizar o secret após um novo login (sem precisar apagar o cache).
       - name: Baixar export do Feedz
         env:
           FEEDZ_STATE: ${{ github.workspace }}/feedz_state.json
+          FEEDZ_STATE_JSON: ${{ secrets.FEEDZ_STATE_JSON }}
         run: |
-          python3 scripts/feedz_export.py download -o colaboradores.xlsx || {
-            echo "::error::Sessão do Feedz expirou. Rode local: python3 scripts/feedz_export.py login e atualize o secret FEEDZ_STATE_JSON com o conteúdo de ~/.config/devoz/feedz_state.json."
-            exit 1
-          }
+          python3 scripts/feedz_export.py download -o colaboradores.xlsx && exit 0
+          if [ -n "$FEEDZ_STATE_JSON" ] && [ "$(cat feedz_state.json)" != "$FEEDZ_STATE_JSON" ]; then
+            echo "::warning::Sessão do cache morta; tentando a do secret FEEDZ_STATE_JSON."
+            printf '%s' "$FEEDZ_STATE_JSON" > feedz_state.json
+            chmod 600 feedz_state.json
+            python3 scripts/feedz_export.py download -o colaboradores.xlsx && exit 0
+          fi
+          echo "::error::Sessão do Feedz expirou. Rode local: python3 scripts/feedz_export.py login e atualize o secret FEEDZ_STATE_JSON com o conteúdo de ~/.config/devoz/feedz_state.json."
+          exit 1
 
       # Persiste a sessão renovada (cookies rotacionados) p/ a próxima execução.
       # SÓ em caso de sucesso — cachear uma sessão morta impediria o secret
