@@ -50,7 +50,8 @@ import urllib.request
 UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
 
 def env(name, default=None, required=False):
-    v = os.environ.get(name, default)
+    # secret inexistente chega do GitHub Actions como "" — trata como ausente para valer o default
+    v = os.environ.get(name) or default
     if isinstance(v, str):
         v = v.strip().strip('"\'“”‘’').strip()
     if required and not v:
