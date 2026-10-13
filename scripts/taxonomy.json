@@ -13,7 +13,7 @@
   "times": [
     { "time": "Executive",        "area": "Executive" },
 
-    { "time": "Demand Generation","area": "Revenue", "grupos": ["Marketing", "Sales Development"] },
+    { "time": "Demand Generation","area": "Revenue" },
     { "time": "Sales",            "area": "Revenue" },
     { "time": "Customer Care",    "area": "Revenue", "grupos": ["Support", "CS", "Data Manipulation"] },
 
