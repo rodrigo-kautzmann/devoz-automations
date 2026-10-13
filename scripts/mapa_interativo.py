@@ -252,7 +252,7 @@ TEMPLATE = r'''<!DOCTYPE html>
 <script>
 const DADOS = __DATA__;
 const map = L.map('map',{scrollWheelZoom:true}).setView([-15.6,-52.0],4);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
 const GREEN='#00D256', GREEND='#00B84C';
 const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
 const radius=n=> 8 + Math.sqrt(n)*5;
